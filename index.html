@@ -1,0 +1,2615 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>محرر الفيديو والصوت الذكي</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&family=Tajawal:wght@400;700&family=Amiri&family=Aref+Ruqaa:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #1f2937; }
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+        
+        body { font-family: 'Tajawal', sans-serif; }
+        
+        .timeline-grid {
+            background-image: linear-gradient(to right, #374151 1px, transparent 1px);
+            background-size: 50px 100%;
+        }
+        
+        .clip-handle {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 16px;
+            background: rgba(255, 255, 255, 0.4);
+            cursor: ew-resize;
+            z-index: 50;
+            transition: background 0.2s;
+        }
+        .clip-handle::after {
+            content: '||';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: rgba(0,0,0,0.5);
+            font-size: 8px;
+            pointer-events: none;
+            font-weight: bold;
+        }
+        .clip-handle:hover { background: rgba(255, 255, 255, 0.8); }
+        .clip-handle.left { left: 0; border-right: 1px solid rgba(0,0,0,0.3); }
+        .clip-handle.right { right: 0; border-left: 1px solid rgba(0,0,0,0.3); }
+        
+        .ltr-timeline { dir: ltr; direction: ltr; }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-200 h-screen flex flex-col overflow-hidden selection:bg-blue-500 selection:text-white">
+
+    <!-- نافذة إعدادات التصدير -->
+    <div id="exportSettingsModal" class="fixed inset-0 bg-black/90 z-[150] hidden flex-col items-center justify-center p-4">
+        <div class="bg-gray-800 border border-gray-700 rounded-lg w-full max-w-sm flex flex-col shadow-2xl">
+            <div class="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-900 rounded-t-lg shrink-0">
+                <div class="flex items-center gap-2 text-blue-400">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>
+                    <h2 class="text-lg font-bold">تصدير المشروع</h2>
+                </div>
+                <button onclick="document.getElementById('exportSettingsModal').style.display='none'" class="text-gray-400 hover:text-white transition">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div class="p-4 flex flex-col gap-4">
+                <div class="flex flex-col gap-2">
+                    <label class="text-sm text-gray-300 font-bold">اسم الملف</label>
+                    <input type="text" id="exportFilenameInput" class="bg-gray-900 border border-gray-600 rounded p-2 text-sm text-white focus:outline-none focus:border-blue-500" placeholder="مثال: مشروعي_الجديد">
+                </div>
+                
+                <div class="flex flex-col gap-2 border-t border-gray-700 pt-3">
+                    <label class="text-sm text-gray-300 font-bold">مجلد الحفظ (اختياري)</label>
+                    <div class="flex items-center gap-2">
+                        <button onclick="chooseSaveLocation()" class="bg-gray-700 hover:bg-gray-600 text-white text-xs px-3 py-2 rounded transition border border-gray-600">تحديد المسار...</button>
+                        <span id="saveLocationText" class="text-[10px] text-gray-400 truncate flex-1" dir="ltr">الافتراضي (التنزيلات)</span>
+                    </div>
+                </div>
+
+                <p class="text-[11px] text-gray-400 border-t border-gray-700 pt-2">ملاحظة: يمكنك تحديد مسار مخصص للحفظ فيه مباشرة، أو تركه ليُحفظ في مجلد التنزيلات الافتراضي.</p>
+                <button onclick="doExport()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-lg shadow-lg transition mt-1">
+                    بدء التصدير
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- شاشات التحميل والتصدير -->
+    <div id="exportOverlay" class="fixed inset-0 bg-gray-900/95 z-[100] hidden flex-col items-center justify-center">
+        <div class="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+        <h2 class="text-lg font-bold mb-1">جاري تصدير الملف...</h2>
+        <p class="text-xs text-gray-400">يتم معالجة الفيديو بالوقت الفعلي، يرجى الانتظار</p>
+        <div class="w-64 bg-gray-800 rounded-full h-1.5 mt-4 overflow-hidden">
+            <div id="exportProgress" class="bg-blue-500 h-1.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+        </div>
+    </div>
+
+    <div id="aiLoadingOverlay" class="fixed inset-0 bg-gray-900/95 z-[100] hidden flex-col items-center justify-center">
+        <div class="w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+        <h2 class="text-lg font-bold mb-1 text-white">جاري التحليل والمعالجة...</h2>
+        <p class="text-xs text-gray-400">يستخدم الذكاء الاصطناعي لتنفيذ المهمة</p>
+    </div>
+
+    <!-- الشريط العلوي -->
+    <header class="bg-gray-800 border-b border-gray-700 p-3 flex justify-between items-center shadow-md shrink-0 h-14 z-10">
+        <div class="flex items-center gap-3">
+            <svg class="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+            <h1 class="text-lg font-bold">محرر الفيديو والصوت</h1>
+            
+            <select id="resolutionSelect" onchange="changeResolution()" class="ml-4 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-blue-500">
+                <option value="1280x720">أفقي (1280x720)</option>
+                <option value="1920x1080">أفقي (1920x1080)</option>
+                <option value="720x1280">عمودي (720x1280)</option>
+                <option value="1080x1080">مربع (1080x1080)</option>
+                <option value="custom" id="customResolutionOption" style="display:none;">مخصص</option>
+            </select>
+        </div>
+        <div class="flex gap-2">
+            <button onclick="showExportModal('audio')" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded text-xs transition font-medium flex items-center gap-1">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path></svg>
+                تصدير كصوت
+            </button>
+            <button onclick="showExportModal('video')" class="bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded text-xs transition font-medium flex items-center gap-1 shadow-lg shadow-blue-500/30">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                تصدير كفيديو
+            </button>
+        </div>
+    </header>
+
+    <!-- القسم الأوسط -->
+    <main class="flex-1 flex overflow-hidden">
+        
+        <!-- اللوحة الجانبية (الوسائط والخصائص) -->
+        <aside class="w-80 bg-gray-800 border-l border-gray-700 flex flex-col shrink-0 overflow-y-auto">
+            
+            <!-- قسم الوسائط -->
+            <div class="p-4 border-b border-gray-700">
+                <h2 class="font-bold text-sm mb-3 text-gray-300">الوسائط</h2>
+                <label class="bg-gray-700 hover:bg-gray-600 cursor-pointer p-2 rounded flex items-center justify-center gap-2 transition border border-dashed border-gray-500 text-xs mb-3">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                    <span>إضافة ملفات (فيديو/صوت/صورة)</span>
+                    <input type="file" id="fileInput" accept="video/*,audio/*,image/*" multiple class="hidden" onchange="handleFiles(event)">
+                </label>
+                
+                <button onclick="openAiImageModal()" class="bg-purple-700 hover:bg-purple-600 cursor-pointer p-2 rounded flex items-center justify-center gap-2 transition border border-dashed border-purple-400 text-xs mb-3 w-full text-white shadow-lg shadow-purple-500/20">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg>
+                    <span>إنشاء صورة بالذكاء الصناعي</span>
+                </button>
+
+                <div class="flex flex-col gap-2 max-h-48 overflow-y-auto pr-1" id="mediaLibrary"></div>
+            </div>
+
+            <!-- قسم الخصائص -->
+            <div id="propertiesPanel" class="p-4 hidden flex-col gap-4 pb-10">
+                <h3 class="font-bold text-sm text-blue-400 border-b border-gray-700 pb-2">خصائص المقطع</h3>
+                
+                <!-- خصائص الفيديو/الصوت/الصور الأساسية -->
+                <div id="mediaProps" class="flex flex-col gap-3">
+                    
+                    <div class="flex flex-col gap-1">
+                        <label class="text-xs text-gray-400 flex justify-between">
+                            <span>السرعة</span>
+                            <span id="speedValueDisplay" class="text-white font-mono">1x</span>
+                        </label>
+                        <input type="range" id="speedSlider" min="0.25" max="3" step="0.25" value="1" oninput="changeProp('speed', this.value)" class="w-full accent-blue-500">
+                    </div>
+
+                    <!-- إعدادات الصوت المتقدمة (مستوى وتدرج) -->
+                    <div id="audioSettingsProps" class="flex flex-col gap-2 mt-2 border-t border-gray-700 pt-3">
+                        <label class="text-xs text-gray-400 font-bold text-green-400">إعدادات الصوت</label>
+                        <div class="flex flex-col gap-1">
+                            <label class="text-[10px] text-gray-400 flex justify-between">
+                                <span>مستوى الصوت</span><span id="audioVolumeDisplay">100%</span>
+                            </label>
+                            <input type="range" id="audioVolume" min="0" max="3" step="0.1" value="1" oninput="changeProp('volume', this.value)" class="w-full accent-green-500">
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 mt-1">
+                            <div class="flex flex-col gap-1">
+                                <label class="text-[10px] text-gray-400">تدرج دخول (ثواني)</label>
+                                <input type="number" step="0.1" min="0" id="audioFadeIn" oninput="changeProp('audioFadeIn', this.value)" class="bg-gray-900 border border-gray-600 rounded p-1 text-xs text-white">
+                            </div>
+                            <div class="flex flex-col gap-1">
+                                <label class="text-[10px] text-gray-400">تدرج خروج (ثواني)</label>
+                                <input type="number" step="0.1" min="0" id="audioFadeOut" oninput="changeProp('audioFadeOut', this.value)" class="bg-gray-900 border border-gray-600 rounded p-1 text-xs text-white">
+                            </div>
+                        </div>
+                        <div class="flex flex-col gap-1 mt-1">
+                            <label class="text-[10px] text-gray-400 flex justify-between">
+                                <span>يبدأ التدرج من مستوى</span>
+                                <span id="audioStartVolumeDisplay">0%</span>
+                            </label>
+                            <input type="range" id="audioStartVolume" min="0" max="1" step="0.1" value="0" oninput="changeProp('audioStartVolume', this.value)" class="w-full accent-green-500">
+                        </div>
+                        <div class="flex items-center gap-2 mt-1">
+                            <input type="checkbox" id="muteToggle" onchange="changeProp('isMuted', this.checked)" class="accent-green-500">
+                            <label class="text-[10px] text-gray-400 cursor-pointer" for="muteToggle">كتم الصوت تماماً</label>
+                        </div>
+                    </div>
+
+                    <!-- إخفاء الصورة -->
+                    <div id="visibilityProps" class="flex flex-col gap-2 mt-1 border-t border-gray-700 pt-3">
+                        <label class="text-[10px] text-gray-400 flex items-center gap-2 cursor-pointer" id="hideVideoToggleContainer">
+                            <input type="checkbox" id="hideVideoToggle" onchange="changeProp('isHidden', this.checked)" class="accent-blue-500">
+                            إخفاء الصورة / الفيديو
+                        </label>
+                    </div>
+
+                    <!-- تخصيص الأبعاد والمقاس -->
+                    <div id="transformProps" class="flex flex-col gap-3 border-t border-gray-700 pt-3">
+                        <div class="flex flex-col gap-1">
+                            <label class="text-[10px] text-gray-400 mb-1">ملائمة الأبعاد في الشاشة</label>
+                            <div class="flex gap-2">
+                                <button id="btnFitContain" onclick="changeProp('fitMode', 'contain')" class="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-[10px] py-1.5 rounded transition border border-transparent">احتواء (بدون قص)</button>
+                                <button id="btnFitCover" onclick="changeProp('fitMode', 'cover')" class="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-[10px] py-1.5 rounded transition border border-transparent">تعبئة (بدون فراغ)</button>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-col gap-1">
+                            <label class="text-[10px] text-gray-400 flex justify-between">
+                                <span>الحجم (مقياس %)</span>
+                            </label>
+                            <input type="range" id="mediaScale" min="10" max="300" value="100" oninput="changeProp('scale', this.value)" class="w-full accent-blue-500">
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2">
+                            <div class="flex flex-col gap-1">
+                                <label class="text-[10px] text-gray-400">المكان (أفقي %)</label>
+                                <input type="range" id="mediaX" min="-50" max="150" value="50" oninput="changeProp('x', this.value)" class="accent-blue-500">
+                            </div>
+                            <div class="flex flex-col gap-1">
+                                <label class="text-[10px] text-gray-400">المكان (عمودي %)</label>
+                                <input type="range" id="mediaY" min="-50" max="150" value="50" oninput="changeProp('y', this.value)" class="accent-blue-500">
+                            </div>
+                        </div>
+                        
+                        <button onclick="setProjectSizeToClip()" class="bg-gray-700 border border-gray-600 hover:bg-gray-500 text-white p-2 rounded text-[10px] transition mt-1 w-full flex items-center justify-center gap-1">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>
+                            تغيير أبعاد المشروع ليطابق المقطع
+                        </button>
+                    </div>
+
+                    <!-- حركات وانتقالات للصور والفيديو -->
+                    <div id="visualAnimProps" class="flex flex-col gap-2 mt-2 border-t border-gray-700 pt-3">
+                        <label class="text-xs text-gray-400 font-bold text-yellow-400">حركات وانتقالات (Transitions)</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div class="flex flex-col gap-1">
+                                <label class="text-[10px] text-gray-400">تأثير الدخول</label>
+                                <select id="mediaEffectIn" onchange="changeProp('effectIn', this.value)" class="bg-gray-900 border border-gray-600 rounded p-1 text-xs w-full text-white">
+                                    <option value="none">بدون</option>
+                                    <option value="fade">تلاشي (Fade)</option>
+                                    <option value="zoom">اندفاع (Zoom)</option>
+                                    <option value="slideRight">دخول من اليمين</option>
+                                    <option value="slideLeft">دخول من اليسار</option>
+                                    <option value="slideUp">صعود للأعلى</option>
+                                </select>
+                            </div>
+                            <div class="flex flex-col gap-1">
+                                <label class="text-[10px] text-gray-400">المدة (ثواني)</label>
+                                <input type="number" step="0.1" min="0" id="mediaFadeIn" oninput="changeProp('fadeIn', this.value)" class="bg-gray-900 border border-gray-600 rounded p-1 text-xs text-white" value="0">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 mt-1">
+                            <div class="flex flex-col gap-1">
+                                <label class="text-[10px] text-gray-400">تأثير الخروج</label>
+                                <select id="mediaEffectOut" onchange="changeProp('effectOut', this.value)" class="bg-gray-900 border border-gray-600 rounded p-1 text-xs w-full text-white">
+                                    <option value="none">بدون</option>
+                                    <option value="fade">تلاشي (Fade)</option>
+                                    <option value="zoom">انكماش (Zoom Out)</option>
+                                    <option value="slideRight">خروج لليمين</option>
+                                    <option value="slideLeft">خروج لليسار</option>
+                                    <option value="slideDown">نزول للأسفل</option>
+                                </select>
+                            </div>
+                            <div class="flex flex-col gap-1">
+                                <label class="text-[10px] text-gray-400">المدة (ثواني)</label>
+                                <input type="number" step="0.1" min="0" id="mediaFadeOut" oninput="changeProp('fadeOut', this.value)" class="bg-gray-900 border border-gray-600 rounded p-1 text-xs text-white" value="0">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- تأثيرات بيئية -->
+                    <div id="overlaySelectContainer" class="flex flex-col gap-1 mt-2 border-t border-gray-700 pt-3">
+                        <label class="text-xs text-gray-400 font-bold text-cyan-400">تأثيرات بيئية (Overlays)</label>
+                        <select id="overlaySelect" onchange="changeProp('overlayEffect', this.value)" class="bg-gray-900 border border-gray-600 rounded p-1.5 text-xs w-full text-white">
+                            <option value="none">بدون تأثير</option>
+                            <option value="dust">غبار متطاير</option>
+                            <option value="rain">مطر</option>
+                            <option value="oldfilm">فلم قديم سينمائي</option>
+                        </select>
+                        
+                        <div id="overlaySettingsContainer" class="hidden flex-col gap-2 mt-2 pl-2 border-r-2 border-cyan-800">
+                            <div class="flex flex-col gap-1">
+                                <label class="text-[10px] text-gray-400 flex justify-between"><span>الشفافية</span><span id="overlayOpVal">0.5</span></label>
+                                <input type="range" id="overlayOpacity" min="0.1" max="1" step="0.1" value="0.5" oninput="changeProp('overlayOpacity', this.value)" class="w-full accent-cyan-500">
+                            </div>
+                            <div class="flex flex-col gap-1">
+                                <label class="text-[10px] text-gray-400 flex justify-between"><span>الحجم (المطر/الغبار/الخدوش)</span><span id="overlaySzVal">1</span></label>
+                                <input type="range" id="overlaySize" min="0.5" max="5" step="0.1" value="1" oninput="changeProp('overlaySize', this.value)" class="w-full accent-cyan-500">
+                            </div>
+                            <div class="flex flex-col gap-1">
+                                <label class="text-[10px] text-gray-400 flex justify-between"><span>سرعة الحركة</span><span id="overlaySpdVal">1</span></label>
+                                <input type="range" id="overlaySpeed" min="0.1" max="5" step="0.1" value="1" oninput="changeProp('overlaySpeed', this.value)" class="w-full accent-cyan-500">
+                            </div>
+                            <div class="flex flex-col gap-1">
+                                <label class="text-[10px] text-gray-400">لون التأثير</label>
+                                <input type="color" id="overlayColor" oninput="changeProp('overlayColor', this.value)" class="w-full h-8 rounded cursor-pointer bg-gray-900 border border-gray-600">
+                            </div>
+                            <div id="oldFilmSettings" class="flex flex-col gap-1 hidden mt-1">
+                                <label class="text-[10px] text-gray-400 flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" id="overlayOldFilmTint" onchange="changeProp('overlayOldFilmTint', this.checked)" class="accent-cyan-500" checked>
+                                    تطبيق اللون الأصفر السينمائي القديم
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- تأثيرات التفاعل مع الصوت -->
+                    <div id="reactiveSelectContainer" class="flex flex-col gap-2 mt-2 border-t border-gray-700 pt-3">
+                        <label class="text-xs text-gray-400 font-bold text-pink-400">تأثيرات تفاعل مع الصوت</label>
+                        <select id="reactiveSelect" onchange="changeProp('reactiveEffect', this.value)" class="bg-gray-900 border border-gray-600 rounded p-1.5 text-xs w-full text-white mb-1">
+                            <option value="none">بدون تأثير</option>
+                            <option value="shake">اهتزاز مع الإيقاع</option>
+                            <option value="glitch">تشويش (Glitch) مع الإيقاع</option>
+                        </select>
+                        
+                        <div class="flex flex-col gap-1">
+                            <label class="text-[10px] text-gray-400 flex justify-between">
+                                <span>قوة التأثير (Intensity)</span>
+                            </label>
+                            <input type="range" id="reactiveIntensity" min="0.1" max="3" step="0.1" value="1" oninput="changeProp('reactiveIntensity', this.value)" class="w-full accent-pink-500">
+                        </div>
+                        <div class="flex flex-col gap-1">
+                            <label class="text-[10px] text-gray-400 flex justify-between">
+                                <span>حساسية الصوت (Sensitivity)</span>
+                            </label>
+                            <input type="range" id="reactiveSensitivity" min="0" max="100" value="50" oninput="changeProp('reactiveSensitivity', this.value)" class="w-full accent-pink-500">
+                        </div>
+                    </div>
+                    
+                    <button id="btnCreateVisualizer" onclick="openVisualizerModal()" class="bg-pink-600 hover:bg-pink-500 text-white p-2 rounded text-xs transition hidden justify-center items-center gap-1 shadow shadow-pink-500/30 mt-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                        إنشاء مخطط صوتي للمقطع
+                    </button>
+
+                    <button id="btnAnimateImage" onclick="openAiVideoModalFromProps()" class="bg-indigo-600 hover:bg-indigo-500 text-white p-2 rounded text-xs transition hidden justify-center items-center gap-1 shadow shadow-indigo-500/30">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                        تحريك الصورة بالذكاء الصناعي
+                    </button>
+                    
+                    <button id="btnCaptureFrame" onclick="captureLastFrame()" class="bg-blue-600 hover:bg-blue-500 text-white p-2 rounded text-xs transition hidden justify-center items-center gap-1 shadow shadow-blue-500/30">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                        التقاط آخر إطار كصورة
+                    </button>
+                </div>
+
+                <!-- خصائص المخطط الصوتي (Visualizer) -->
+                <div id="visProps" class="hidden flex-col gap-3">
+                    <div class="flex flex-col gap-1">
+                        <label class="text-xs text-gray-400">الشكل</label>
+                        <select id="visShapeProp" onchange="changeProp('shape', this.value)" class="bg-gray-900 border border-gray-600 rounded p-1.5 text-xs w-full">
+                            <option value="bars">أعمدة (Bars)</option>
+                            <option value="circle">دائرة (Circle)</option>
+                            <option value="wave">مخطط نبضي (Wave)</option>
+                        </select>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div class="flex flex-col gap-1">
+                            <label class="text-xs text-gray-400">اللون</label>
+                            <input type="color" id="visColorProp" oninput="changeProp('color', this.value)" class="w-full h-8 rounded cursor-pointer bg-gray-900 border border-gray-600">
+                        </div>
+                        <div class="flex flex-col gap-1">
+                            <label class="text-xs text-gray-400 flex justify-between">
+                                <span>الشفافية</span>
+                            </label>
+                            <input type="range" id="visOpacityProp" min="0.1" max="1" step="0.1" oninput="changeProp('opacity', this.value)" class="w-full accent-pink-500 mt-2">
+                        </div>
+                    </div>
+                    <div class="flex flex-col gap-1">
+                        <label class="text-xs text-gray-400">الحجم العام</label>
+                        <input type="range" id="visSizeProp" min="10" max="200" oninput="changeProp('size', this.value)" class="w-full accent-pink-500">
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-2 mt-1">
+                        <div class="flex flex-col gap-1">
+                            <label class="text-[10px] text-gray-400">الطول الأقصى للأمواج</label>
+                            <input type="range" id="visMaxHeightProp" min="0.2" max="3" step="0.1" value="1" oninput="changeProp('maxHeight', this.value)" class="w-full accent-pink-500">
+                        </div>
+                        <div class="flex flex-col gap-1">
+                            <label class="text-[10px] text-gray-400">حجم الدائرة الداخلي</label>
+                            <input type="range" id="visRadiusProp" min="10" max="300" value="100" oninput="changeProp('radius', this.value)" class="w-full accent-pink-500">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2 mt-1">
+                        <div class="flex flex-col gap-1">
+                            <label class="text-xs text-gray-400">المكان (أفقي %)</label>
+                            <input type="range" id="visXProp" min="0" max="100" oninput="changeProp('x', this.value)" class="accent-pink-500">
+                        </div>
+                        <div class="flex flex-col gap-1">
+                            <label class="text-xs text-gray-400">المكان (عمودي %)</label>
+                            <input type="range" id="visYProp" min="0" max="100" oninput="changeProp('y', this.value)" class="accent-pink-500">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- خصائص النصوص (الترجمة) -->
+                <div id="textProps" class="hidden flex-col gap-3">
+                    <div class="flex flex-col gap-1">
+                        <label class="text-xs text-gray-400">النص</label>
+                        <textarea id="textContent" oninput="changeProp('content', this.value)" class="bg-gray-900 border border-gray-600 rounded p-2 text-sm text-white resize-none" rows="2"></textarea>
+                    </div>
+                    
+                    <div class="flex flex-col gap-1">
+                        <label class="text-xs text-gray-400">الخط</label>
+                        <select id="textFont" onchange="changeProp('font', this.value)" class="bg-gray-900 border border-gray-600 rounded p-1.5 text-xs w-full">
+                            <option value="Tajawal">تجوال (Tajawal)</option>
+                            <option value="Cairo">القاهرة (Cairo)</option>
+                            <option value="Amiri">أميري (Amiri)</option>
+                            <option value="'Aref Ruqaa'">عارف رقعة (Aref Ruqaa)</option>
+                            <option value="Arial">Arial</option>
+                        </select>
+                    </div>
+
+                    <div class="flex flex-col gap-1">
+                        <label class="text-xs text-gray-400 flex justify-between">
+                            <span>حجم الخط</span>
+                            <span id="textSizeDisplay" class="text-white font-mono">40</span>
+                        </label>
+                        <input type="range" id="textSize" min="10" max="200" value="40" oninput="changeProp('size', this.value)" class="w-full accent-blue-500">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3 mt-1">
+                        <div class="flex flex-col gap-1">
+                            <label class="text-xs text-gray-400">لون الخط</label>
+                            <input type="color" id="textColor" oninput="changeProp('color', this.value)" class="w-full h-8 rounded cursor-pointer bg-gray-900 border border-gray-600" value="#ffffff">
+                        </div>
+                        <div class="flex flex-col gap-1">
+                            <label class="text-xs text-gray-400">لون الظل</label>
+                            <input type="color" id="textShadowColor" oninput="changeProp('shadowColor', this.value)" class="w-full h-8 rounded cursor-pointer bg-gray-900 border border-gray-600" value="#000000">
+                        </div>
+                    </div>
+
+                    <div class="flex flex-col gap-1">
+                        <label class="text-xs text-gray-400 flex justify-between">
+                            <span>الشفافية</span>
+                            <span id="textOpacityDisplay" class="text-white font-mono">1</span>
+                        </label>
+                        <input type="range" id="textOpacity" min="0" max="1" step="0.1" value="1" oninput="changeProp('opacity', this.value)" class="w-full accent-blue-500">
+                    </div>
+
+                    <div class="flex flex-col gap-1">
+                        <label class="text-xs text-gray-400 flex justify-between">
+                            <span>انتشار الظل</span>
+                            <span id="textShadowBlurDisplay" class="text-white font-mono">10</span>
+                        </label>
+                        <input type="range" id="textShadowBlur" min="0" max="50" value="10" oninput="changeProp('shadowBlur', this.value)" class="w-full accent-blue-500">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2 mt-1">
+                        <div class="flex flex-col gap-1">
+                            <label class="text-xs text-gray-400">المكان (أفقي %)</label>
+                            <input type="range" id="textX" min="0" max="100" value="50" oninput="changeProp('x', this.value)" class="accent-blue-500">
+                        </div>
+                        <div class="flex flex-col gap-1">
+                            <label class="text-xs text-gray-400">المكان (عمودي %)</label>
+                            <input type="range" id="textY" min="0" max="100" value="90" oninput="changeProp('y', this.value)" class="accent-blue-500">
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-2 mt-1">
+                        <div class="flex flex-col gap-1">
+                            <label class="text-[10px] text-gray-400">تأثير الدخول</label>
+                            <select id="textEffectIn" onchange="changeProp('effectIn', this.value)" class="bg-gray-900 border border-gray-600 rounded p-1 text-xs w-full text-white">
+                                <option value="fade">تلاشي (Fade)</option>
+                                <option value="zoom">اندفاع (Zoom)</option>
+                                <option value="slideRight">دخول من اليمين</option>
+                                <option value="slideLeft">دخول من اليسار</option>
+                                <option value="slideUp">صعود (Slide Up)</option>
+                                <option value="typewriter">كتابة (Typewriter)</option>
+                            </select>
+                        </div>
+                        <div class="flex flex-col gap-1">
+                            <label class="text-[10px] text-gray-400">المدة (ثواني)</label>
+                            <input type="number" step="0.1" min="0" id="textFadeIn" oninput="changeProp('fadeIn', this.value)" class="bg-gray-900 border border-gray-600 rounded p-1 text-xs text-white" value="0.1">
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-2 mt-1">
+                        <div class="flex flex-col gap-1">
+                            <label class="text-[10px] text-gray-400">تأثير الخروج</label>
+                            <select id="textEffectOut" onchange="changeProp('effectOut', this.value)" class="bg-gray-900 border border-gray-600 rounded p-1 text-xs w-full text-white">
+                                <option value="fade">تلاشي (Fade)</option>
+                                <option value="zoom">انكماش (Zoom Out)</option>
+                                <option value="slideRight">خروج لليمين</option>
+                                <option value="slideLeft">خروج لليسار</option>
+                                <option value="slideDown">نزول (Slide Down)</option>
+                            </select>
+                        </div>
+                        <div class="flex flex-col gap-1">
+                            <label class="text-[10px] text-gray-400">المدة (ثواني)</label>
+                            <input type="number" step="0.1" min="0" id="textFadeOut" oninput="changeProp('fadeOut', this.value)" class="bg-gray-900 border border-gray-600 rounded p-1 text-xs text-white" value="0.1">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- أزرار الإجراءات المشتركة -->
+                <div class="mt-4 flex flex-col gap-2 border-t border-gray-700 pt-3">
+                    <button id="aiSubtitleBtn" onclick="prepareAISubtitles()" class="bg-purple-600 hover:bg-purple-500 text-white p-2 rounded text-xs transition hidden justify-center items-center gap-2 shadow shadow-purple-500/30">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                        توليد ترجمة تلقائية (AI)
+                    </button>
+                    
+                    <button id="confirmAIBtn" onclick="executeAISubtitles()" class="bg-green-600 hover:bg-green-500 text-white p-2 rounded text-xs transition hidden justify-center items-center gap-2 shadow shadow-green-500/30 animate-pulse">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                        تأكيد التصميم وبدء التوليد
+                    </button>
+                    
+                    <button id="deleteClipBtn" onclick="deleteSelectedClip()" class="bg-red-600/80 hover:bg-red-500 text-white p-2 rounded text-xs transition flex justify-center items-center gap-1">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        حذف المقطع
+                    </button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- شاشة المعاينة الكبيرة -->
+        <div class="flex-1 flex flex-col bg-black relative">
+            
+            <div id="previewContainer" class="flex-1 flex items-center justify-center p-4 relative overflow-hidden bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTAgMGgyMHYyMEgwVjB6bTEwIDEwaDEwdjEwSDEwVjEweiIgZmlsbD0iIzIyMiIgZmlsbC1vcGFjaXR5PSIwLjQiIGZpbGwtcnVsZT0iZXZlbm9kZCIvPjwvc3ZnPg==')]">
+                
+                <!-- زر ملء الشاشة -->
+                <button onclick="toggleFullScreen()" class="absolute top-4 right-4 bg-black/60 text-white p-2 rounded hover:bg-white/20 transition z-20 shadow-lg" title="ملء الشاشة">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M20 8V4m0 0h-4M4 16v4m0 0h4M20 16v4m0 0h-4"></path></svg>
+                </button>
+
+                <canvas id="previewCanvas" width="1280" height="720" class="max-w-full max-h-full object-contain shadow-2xl transition-transform duration-200" style="transform: scale(1);"></canvas>
+                
+                <div class="absolute bottom-4 left-4 bg-black/60 rounded p-1 flex gap-1 z-10" dir="ltr">
+                    <button onclick="changeCanvasZoom(-0.1)" class="w-7 h-7 text-white hover:bg-white/20 rounded flex items-center justify-center"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path></svg></button>
+                    <span id="canvasZoomDisplay" class="text-white text-xs flex items-center px-1 font-mono">100%</span>
+                    <button onclick="changeCanvasZoom(0.1)" class="w-7 h-7 text-white hover:bg-white/20 rounded flex items-center justify-center"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg></button>
+                    <button onclick="resetCanvasZoom()" class="w-7 h-7 text-blue-400 hover:bg-white/20 rounded flex items-center justify-center"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg></button>
+                </div>
+            </div>
+
+            <div class="h-12 bg-gray-900 border-t border-gray-800 flex items-center justify-center gap-4 ltr-timeline px-4 z-10">
+                <span id="currentTimeDisplay" class="font-mono text-xs text-gray-400 w-16 text-right">00:00.0</span>
+                <button onclick="togglePlay()" id="playBtn" class="w-8 h-8 bg-blue-600 hover:bg-blue-500 rounded-full flex items-center justify-center transition shadow shadow-blue-500/50">
+                    <svg class="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"></path></svg>
+                </button>
+                <span id="totalTimeDisplay" class="font-mono text-xs text-gray-400 w-16">00:00.0</span>
+            </div>
+        </div>
+    </main>
+
+    <!-- منطقة الشريط الزمني (Timeline) -->
+    <div class="h-[40vh] min-h-[250px] bg-gray-800 border-t border-gray-700 flex flex-col shrink-0 ltr-timeline select-none relative">
+        
+        <div class="h-10 bg-gray-900 border-b border-gray-700 flex items-center px-4 justify-between shrink-0 z-50" dir="rtl">
+            <div class="flex gap-2">
+                <button onclick="splitSelectedClip()" class="bg-gray-700 hover:bg-gray-600 text-white px-2 py-1 rounded text-xs transition flex items-center gap-1 border border-gray-600">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.121 14.121L19 19m-7.071-7.071l-1.414 1.414m0 0L5 19m5.657-5.657l1.414-1.414m0 0L19 5m-7.071 7.071L5 5"></path></svg>
+                    قص
+                </button>
+                <button onclick="addTextClip()" class="bg-gray-700 hover:bg-gray-600 text-white px-2 py-1 rounded text-xs transition flex items-center gap-1 border border-gray-600">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                    إضافة نص
+                </button>
+                <div class="relative group">
+                    <button class="bg-gray-700 hover:bg-gray-600 text-white px-2 py-1 rounded text-xs transition flex items-center gap-1 border border-gray-600">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                        مسار جديد
+                    </button>
+                    <div class="absolute right-0 top-full mt-1 w-32 bg-gray-800 border border-gray-700 rounded shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 flex flex-col py-1">
+                        <button onclick="addTrack('text')" class="px-3 py-2 text-xs text-right text-gray-200 hover:bg-gray-700 hover:text-white transition">مسار نصوص</button>
+                        <button onclick="addTrack('video')" class="px-3 py-2 text-xs text-right text-gray-200 hover:bg-gray-700 hover:text-white transition">مسار فيديو/صور</button>
+                        <button onclick="addTrack('audio')" class="px-3 py-2 text-xs text-right text-gray-200 hover:bg-gray-700 hover:text-white transition">مسار صوت</button>
+                    </div>
+                </div>
+            </div>
+            <div class="flex items-center gap-2" dir="ltr">
+                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7"></path></svg>
+                <input type="range" min="10" max="150" value="50" oninput="changeTimelineZoom(this.value)" class="w-24 accent-blue-500">
+            </div>
+        </div>
+
+        <div class="flex-1 overflow-y-auto overflow-x-auto relative bg-gray-800" id="timelineContainer">
+            <div id="playheadLine" class="absolute top-0 bottom-0 w-px bg-red-500/50 z-40 pointer-events-none" style="left: 80px;"></div>
+            
+            <!-- خط المغناطيس الإرشادي -->
+            <div id="snapGuideLine" class="absolute top-0 bottom-0 w-px bg-yellow-400 z-50 hidden pointer-events-none shadow-[0_0_8px_yellow]" style="left: 0px;"></div>
+
+            <div class="w-[5000px] min-h-full flex flex-col pb-4 gap-1 relative">
+                <div class="flex group sticky top-0 z-30 bg-gray-900 border-b border-gray-700 h-6 shrink-0 shadow-sm">
+                    <div class="w-20 shrink-0 bg-gray-900 border-r border-gray-700 sticky left-0 z-40"></div>
+                    <div class="flex-1 relative cursor-pointer overflow-hidden" id="timeRuler">
+                        <div id="playhead" class="absolute top-0 bottom-0 w-px bg-red-500 z-50 pointer-events-none" style="left: 0px;">
+                            <div class="w-2.5 h-2.5 bg-red-500 rounded-full absolute -top-1 -left-1 shadow-[0_0_5px_red]"></div>
+                        </div>
+                        <div id="rulerMarks" class="h-full w-full timeline-grid relative"></div>
+                    </div>
+                </div>
+
+                <div id="timelineTracksContainer" class="flex flex-col gap-1 w-full relative"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- نافذة إنشاء مخطط صوتي -->
+    <div id="visualizerModal" class="fixed inset-0 bg-black/90 z-[210] hidden flex-col items-center justify-center p-4">
+        <div class="bg-gray-800 border border-gray-700 rounded-lg w-full max-w-sm flex flex-col shadow-2xl">
+            <div class="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-900 rounded-t-lg shrink-0">
+                <div class="flex items-center gap-2 text-pink-400">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                    <h2 class="text-lg font-bold">إنشاء مخطط صوت</h2>
+                </div>
+                <button onclick="document.getElementById('visualizerModal').style.display='none'" class="text-gray-400 hover:text-white transition">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            
+            <div class="p-4 flex flex-col gap-4">
+                <p class="text-xs text-gray-400">سيتم إنشاء مخطط مرئي تفاعلي مع الصوت بنفس مدة المقطع المحدد حالياً.</p>
+                <div class="flex flex-col gap-1">
+                    <label class="text-xs text-gray-400">الشكل المبدئي</label>
+                    <select id="visModalShape" class="bg-gray-900 border border-gray-600 rounded p-2 text-sm text-white">
+                        <option value="bars">أعمدة (Bars)</option>
+                        <option value="circle">دائرة (Circle)</option>
+                        <option value="wave">مخطط نبضي (Wave)</option>
+                    </select>
+                </div>
+                <div class="flex flex-col gap-1">
+                    <label class="text-xs text-gray-400">اللون المبدئي</label>
+                    <input type="color" id="visModalColor" class="w-full h-10 rounded cursor-pointer bg-gray-900 border border-gray-600" value="#ff0080">
+                </div>
+                
+                <button onclick="confirmAddVisualizer()" class="bg-pink-600 hover:bg-pink-500 text-white font-bold py-2.5 rounded-lg shadow-lg transition mt-2">
+                    إضافة المخطط للمسار
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- نافذة إنشاء الصور بالذكاء الصناعي -->
+    <div id="aiImageModal" class="fixed inset-0 bg-black/90 z-[200] hidden flex-col items-center justify-center p-4">
+        <div class="bg-gray-800 border border-gray-700 rounded-lg w-full max-w-2xl flex flex-col max-h-[90vh] shadow-2xl">
+            <div class="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-900 rounded-t-lg shrink-0">
+                <div class="flex items-center gap-2 text-purple-400">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                    <h2 class="text-lg font-bold">إنشاء صورة بالذكاء الصناعي</h2>
+                </div>
+                <button onclick="closeAiImageModal()" class="text-gray-400 hover:text-white transition"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+            </div>
+            <div class="p-4 flex flex-col gap-4 overflow-y-auto">
+                <div class="flex flex-col gap-2 bg-gray-900 p-3 rounded border border-gray-700">
+                    <div class="flex justify-between items-center">
+                        <label class="text-sm text-gray-300 font-bold">صورة مرجعية (اختياري)</label>
+                        <button id="removeRefBtn" class="text-xs bg-red-600/20 text-red-400 px-2 py-1 rounded hover:bg-red-600/40 hidden transition" onclick="removeRefImage()">إزالة الصورة المرجعية</button>
+                    </div>
+                    <label class="bg-gray-800 hover:bg-gray-700 cursor-pointer p-2 rounded flex items-center justify-center gap-2 transition border border-dashed border-gray-600 text-xs w-fit">
+                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                        <span class="text-gray-300">+ إضافة صورة مرجعية</span>
+                        <input type="file" id="aiRefInput" accept="image/*" class="hidden" onchange="loadRefImage(event)">
+                    </label>
+                    <img id="aiRefPreview" class="hidden w-32 h-32 object-cover mt-2 border border-gray-600 rounded shadow-md" />
+                </div>
+                <div class="flex flex-col gap-2">
+                    <label class="text-sm text-gray-300 font-bold">وصف الصورة (Prompt)</label>
+                    <textarea id="aiPrompt" placeholder="اكتب وصفاً دقيقاً للصورة التي تريد إنشاءها..." class="bg-gray-900 border border-gray-600 rounded p-3 text-sm text-white resize-none focus:outline-none focus:border-purple-500 transition shadow-inner" rows="3"></textarea>
+                </div>
+                <button onclick="generateAiImage()" class="bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-lg shadow-lg transition flex justify-center items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
+                    إنشاء الصورة الآن
+                </button>
+                <div id="aiImageLoading" class="hidden flex-col items-center justify-center p-6 bg-gray-900/50 rounded border border-gray-700">
+                    <div class="w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mb-3"></div>
+                    <span class="text-sm text-gray-300">يقوم الذكاء الاصطناعي برسم الصورة...</span>
+                </div>
+                <h3 class="font-bold text-sm text-gray-400 mt-2 border-b border-gray-700 pb-2">المعرض (الصور المنشأة)</h3>
+                <div id="aiGallery" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- نافذة تحريك الصور -->
+    <div id="aiVideoModal" class="fixed inset-0 bg-black/90 z-[210] hidden flex-col items-center justify-center p-4">
+        <div class="bg-gray-800 border border-gray-700 rounded-lg w-full max-w-2xl flex flex-col max-h-[90vh] shadow-2xl">
+            <div class="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-900 rounded-t-lg shrink-0">
+                <div class="flex items-center gap-2 text-indigo-400">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                    <h2 class="text-lg font-bold">تحريك الصورة بالذكاء الصناعي</h2>
+                </div>
+                <button onclick="closeAiVideoModal()" class="text-gray-400 hover:text-white transition"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+            </div>
+            <div class="p-4 flex flex-col gap-4 overflow-y-auto">
+                <div class="flex flex-col md:flex-row gap-4">
+                    <div class="flex flex-col gap-2 shrink-0">
+                        <label class="text-sm text-gray-300 font-bold">الصورة المحددة</label>
+                        <img id="aiVideoRefPreview" class="w-40 h-40 object-cover border border-gray-600 rounded shadow-md" />
+                    </div>
+                    <div class="flex flex-col gap-2 flex-1">
+                        <label class="text-sm text-gray-300 font-bold">وصف الحركة المطلوبة</label>
+                        <textarea id="aiVideoPrompt" placeholder="صف نوع الحركة (مثال: تقريب ببطء للكاميرا، حركة مياه، إلخ)..." class="bg-gray-900 border border-gray-600 rounded p-3 text-sm text-white resize-none focus:outline-none focus:border-indigo-500 transition shadow-inner h-full min-h-[80px]"></textarea>
+                        <label class="text-sm text-gray-300 font-bold mt-2">مدة التحريك (ثواني)</label>
+                        <input type="number" id="aiVideoDuration" min="1" max="15" value="3" class="bg-gray-900 border border-gray-600 rounded p-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+                    </div>
+                </div>
+                <button onclick="generateAiVideo()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-lg shadow-lg transition flex justify-center items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    تحريك الصورة الآن
+                </button>
+                <div id="aiVideoLoading" class="hidden flex-col items-center justify-center p-6 bg-gray-900/50 rounded border border-gray-700">
+                    <div class="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-3"></div>
+                    <span class="text-sm text-gray-300">يتم معالجة الإطارات وتحريك الصورة...</span>
+                </div>
+                <h3 class="font-bold text-sm text-gray-400 mt-2 border-b border-gray-700 pb-2">معرض الفيديوهات المولدة</h3>
+                <div id="aiVideoGallery" class="grid grid-cols-2 sm:grid-cols-3 gap-3"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="hiddenMedia" class="hidden"></div>
+
+    <script>
+        let PIXELS_PER_SECOND = 50;
+        let audioCtx = null;
+        let mixDestination = null;
+        let globalAnalyser = null;
+        let dataArray = null;
+        let clips = []; 
+        let tracks = []; 
+        let libraryMap = new Map(); 
+        let isPlaying = false;
+        let isExporting = false;
+        let exportRecorder = null;
+        let currentTime = 0;
+        let duration = 60;
+        let animationFrameId;
+        let selectedClip = null;
+        let canvasZoomLevel = 1;
+
+        let aiTargetMediaClip = null; 
+        let aiPreviewClip = null;
+        let currentRefImageBase64 = null; 
+        let currentVideoRefImage = null; 
+        let pendingExportFormat = 'video';
+        let fileHandleToSave = null;
+        
+        const canvas = document.getElementById('previewCanvas');
+        const ctx = canvas.getContext('2d');
+        const timelineContainer = document.getElementById('timelineContainer');
+        const apiKey = ""; 
+        const userApiKey = "AIzaSyBJb2-LB5rWBBdPGjfpRcFckiYxQR8V8TU";
+        const activeKey = apiKey || userApiKey;
+        
+        // --- إدارة المسارات المتعددة ---
+        function initTracks() {
+            addTrack('text', 'نصوص وإضافات');
+            addTrack('video', 'فيديو أساسي 1');
+            addTrack('video', 'فيديو أساسي 2');
+            addTrack('audio', 'صوت أساسي');
+        }
+
+        function addTrack(type, nameInput) {
+            const id = 'track_' + type + '_' + Date.now();
+            let name = nameInput;
+            if(!name) {
+                const count = tracks.filter(t => t.type === type).length + 1;
+                name = (type === 'text' ? 'نصوص ' : type === 'video' ? 'فيديو ' : 'صوت ') + count;
+            }
+            tracks.push({ id, type, name });
+            renderTracksUI();
+        }
+
+        function deleteTrack(id) {
+            if(confirm('هل أنت متأكد من حذف هذا المسار وجميع المقاطع بداخله؟')) {
+                clips = clips.filter(c => {
+                    if(c.trackId === id) { 
+                        if(c === aiPreviewClip) aiPreviewClip = null;
+                        c.element.remove(); 
+                        return false; 
+                    }
+                    return true;
+                });
+                tracks = tracks.filter(t => t.id !== id);
+                if(selectedClip && selectedClip.trackId === id) {
+                    selectedClip = null;
+                    document.getElementById('propertiesPanel').classList.add('hidden');
+                    document.getElementById('propertiesPanel').classList.remove('flex');
+                }
+                renderTracksUI();
+                updateProjectDuration();
+                drawCanvas();
+            }
+        }
+
+        function renderTracksUI() {
+            const container = document.getElementById('timelineTracksContainer');
+            container.innerHTML = '';
+            
+            tracks.forEach(track => {
+                let hClass = 'h-16';
+                if(track.type === 'text') hClass = 'h-12';
+                if(track.type === 'audio') hClass = 'h-14';
+                
+                const trackEl = document.createElement('div');
+                trackEl.className = "flex group shrink-0 relative";
+                trackEl.innerHTML = `
+                    <div class="w-20 shrink-0 bg-gray-900 border-r border-b border-gray-700 flex flex-col items-center justify-center text-[10px] text-gray-400 sticky left-0 z-20 shadow-[2px_0_5px_rgba(0,0,0,0.5)]">
+                        <span class="truncate w-full text-center px-1 font-bold text-white">${track.name}</span>
+                        <button onclick="deleteTrack('${track.id}')" class="text-red-500 hover:text-red-400 mt-1 opacity-0 group-hover:opacity-100 transition" title="حذف المسار">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        </button>
+                    </div>
+                    <div class="${hClass} bg-gray-800/80 border-b border-gray-700 flex-1 relative timeline-grid" id="${track.id}" ondrop="drop(event, '${track.id}')" ondragover="allowDrop(event)"></div>
+                `;
+                container.appendChild(trackEl);
+            });
+            
+            clips.forEach(clip => {
+                const tr = document.getElementById(clip.trackId);
+                if(tr) tr.appendChild(clip.element);
+            });
+        }
+
+        function getTrackType(trackId) {
+            const t = tracks.find(t => t.id === trackId);
+            return t ? t.type : null;
+        }
+
+        function drawRuler() {
+            const rulerMarks = document.getElementById('rulerMarks');
+            rulerMarks.innerHTML = '';
+            const maxSeconds = Math.max(100, Math.ceil(duration) + 10);
+            for(let i=0; i<=maxSeconds; i++) {
+                const mark = document.createElement('div');
+                mark.className = 'absolute text-[9px] text-gray-500 top-0.5';
+                mark.style.left = `${i * PIXELS_PER_SECOND}px`;
+                mark.innerText = i + 's';
+                rulerMarks.appendChild(mark);
+            }
+            document.querySelectorAll('.timeline-grid').forEach(el => el.style.backgroundSize = `${PIXELS_PER_SECOND}px 100%`);
+        }
+        
+        function initAudio() {
+            if(!audioCtx) {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                audioCtx = new AudioContext();
+                mixDestination = audioCtx.createMediaStreamDestination();
+                globalAnalyser = audioCtx.createAnalyser();
+                globalAnalyser.fftSize = 256;
+                globalAnalyser.smoothingTimeConstant = 0.8;
+                dataArray = new Uint8Array(globalAnalyser.frequencyBinCount);
+            }
+        }
+
+        // --- التعامل مع الملفات ---
+        async function handleFiles(event) {
+            initAudio();
+            const files = event.target.files;
+            
+            for (let file of files) {
+                const url = URL.createObjectURL(file);
+                const type = file.type.split('/')[0];
+                
+                const mediaObj = {
+                    id: 'media_' + Date.now() + Math.floor(Math.random()*1000),
+                    name: file.name, url: url, type: type, element: null, duration: 5, 
+                    reactiveEffect: 'none', reactiveIntensity: 1, reactiveSensitivity: 50, overlayEffect: 'none',
+                    scale: 100, x: 50, y: 50, fitMode: 'contain',
+                    isMuted: false, isHidden: false, // خصائص الإخفاء والكتم
+                    volume: 1, audioFadeIn: 0, audioFadeOut: 0, audioStartVolume: 0, // خصائص الصوت المتقدمة
+                    effectIn: 'none', effectOut: 'none', fadeIn: 0, fadeOut: 0 // تأثيرات الدخول/الخروج للفيديو/الصورة
+                };
+
+                if (type === 'video' || type === 'audio') {
+                    mediaObj.element = document.createElement(type);
+                    mediaObj.element.src = url;
+                    mediaObj.element.preload = 'auto';
+                    document.getElementById('hiddenMedia').appendChild(mediaObj.element);
+                    
+                    await new Promise(resolve => {
+                        mediaObj.element.onloadedmetadata = () => { mediaObj.duration = mediaObj.element.duration; resolve(); };
+                    });
+
+                    try {
+                        mediaObj.gainNode = audioCtx.createGain();
+                        mediaObj.audioSource = audioCtx.createMediaElementSource(mediaObj.element);
+                        mediaObj.audioSource.connect(mediaObj.gainNode);
+                        mediaObj.gainNode.connect(audioCtx.destination);
+                        mediaObj.gainNode.connect(mixDestination);
+                        mediaObj.gainNode.connect(globalAnalyser); 
+                    } catch(e) { }
+                } else if (type === 'image') {
+                    mediaObj.element = new Image();
+                    mediaObj.element.src = url;
+                }
+                
+                libraryMap.set(mediaObj.id, mediaObj);
+                addToLibrary(mediaObj);
+            }
+        }
+
+        function addToLibrary(mediaObj) {
+            const lib = document.getElementById('mediaLibrary');
+            const item = document.createElement('div');
+            item.className = 'bg-gray-700 p-1.5 rounded flex items-center justify-between text-xs border border-gray-600 group';
+            let icon = typeIcon(mediaObj.type);
+            item.innerHTML = `
+                <div class="flex items-center gap-2 flex-1 truncate cursor-grab" draggable="true" ondragstart="startDrag(event, '${mediaObj.id}')">
+                    ${icon} <span class="truncate" dir="ltr" title="${mediaObj.name}">${mediaObj.name}</span>
+                </div>
+                <button onclick="appendMediaToTrack('${mediaObj.id}')" class="bg-blue-600 hover:bg-blue-500 text-white rounded p-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" title="إضافة سريعة">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                </button>
+            `;
+            lib.appendChild(item);
+        }
+
+        function startDrag(e, id) { e.dataTransfer.setData('text/plain', id); window.draggedMedia = libraryMap.get(id); }
+
+        function appendMediaToTrack(mediaId) {
+            const mediaObj = libraryMap.get(mediaId);
+            if(!mediaObj) return;
+            let trackType = mediaObj.type === 'audio' ? 'audio' : 'video'; 
+            let targetTrack = tracks.find(t => t.type === trackType);
+            if(!targetTrack) { addTrack(trackType); targetTrack = tracks[tracks.length-1]; }
+            let maxTrackTime = 0;
+            clips.filter(c => c.trackId === targetTrack.id).forEach(c => {
+                const end = c.start + ((c.trimEnd - c.trimStart) / c.playbackRate);
+                if(end > maxTrackTime) maxTrackTime = end;
+            });
+            createClip(mediaObj, targetTrack.id, maxTrackTime);
+            setTimeout(() => {
+                const px = maxTrackTime * PIXELS_PER_SECOND;
+                timelineContainer.scrollLeft = Math.max(0, px - timelineContainer.clientWidth / 2);
+            }, 50);
+        }
+
+        function typeIcon(type) {
+            if(type === 'video') return '<svg class="w-4 h-4 text-blue-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>';
+            if(type === 'audio') return '<svg class="w-4 h-4 text-green-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path></svg>';
+            if(type === 'visualizer') return '<svg class="w-4 h-4 text-pink-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>';
+            return '<svg class="w-4 h-4 text-yellow-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>';
+        }
+
+        // --- النصوص والمخططات الصوتية ---
+        function addTextClip() {
+            const mediaObj = {
+                id: 'text_' + Date.now(),
+                type: 'text', name: 'نص جديد', duration: 5, content: 'نص تجريبي',
+                font: 'Tajawal', color: '#ffffff', shadowColor: '#000000', shadowBlur: 10,
+                size: 40, opacity: 1, x: 50, y: 90, fadeIn: 0.1, fadeOut: 0.1, effectIn: 'fade', effectOut: 'fade'
+            };
+            let textTrack = tracks.find(t => t.type === 'text');
+            if(!textTrack) { addTrack('text'); textTrack = tracks[tracks.length-1]; }
+            const safeStart = getSafeStartTime(textTrack.id, currentTime, mediaObj.duration);
+            createClip(mediaObj, textTrack.id, safeStart);
+        }
+
+        function openVisualizerModal() {
+            if(!selectedClip || (selectedClip.media.type !== 'video' && selectedClip.media.type !== 'audio')) return alert("يرجى تحديد مقطع صوت أو فيديو أولاً لربط المخطط بمدته.");
+            document.getElementById('visualizerModal').style.display = 'flex';
+        }
+
+        function confirmAddVisualizer() {
+            const shape = document.getElementById('visModalShape').value;
+            const color = document.getElementById('visModalColor').value;
+            
+            const mediaObj = {
+                id: 'vis_' + Date.now(),
+                type: 'visualizer', name: 'مخطط صوت (' + shape + ')', duration: selectedClip.media.duration,
+                shape: shape, color: color, opacity: 0.9, size: 50, maxHeight: 1, radius: 100, x: 50, y: 50
+            };
+            
+            let track = tracks.find(t => t.type === 'text'); 
+            if(!track) { addTrack('text'); track = tracks[tracks.length-1]; }
+            
+            createClip(mediaObj, track.id, selectedClip.start); 
+            document.getElementById('visualizerModal').style.display = 'none';
+        }
+
+        function prepareAISubtitles() {
+            if(!selectedClip || (selectedClip.media.type !== 'video' && selectedClip.media.type !== 'audio')) return;
+            aiTargetMediaClip = selectedClip;
+            const mediaObj = {
+                id: 'text_preview_' + Date.now(),
+                type: 'text', name: 'معاينة تصميم الترجمة', duration: 8, 
+                content: '(هذا نص تجريبي، سيكون هذا هو السطر الاول)',
+                font: 'Tajawal', color: '#ffffff', shadowColor: '#000000', shadowBlur: 10,
+                size: 45, opacity: 1, x: 50, y: 90, fadeIn: 0.1, fadeOut: 0.1, effectIn: 'fade', effectOut: 'fade'
+            };
+            let textTrack = tracks.find(t => t.type === 'text');
+            if(!textTrack) { addTrack('text'); textTrack = tracks[tracks.length-1]; }
+            const safeStart = getSafeStartTime(textTrack.id, currentTime, mediaObj.duration);
+            createClip(mediaObj, textTrack.id, safeStart);
+            aiPreviewClip = clips[clips.length - 1]; 
+            setTimeout(() => {
+                selectClip(aiPreviewClip);
+                alert("تم إضافة نص معاينة. قم بضبط شكله وحجمه ومكانه كما تحب من القائمة الجانبية، ثم اضغط 'تأكيد وبدء التوليد'.");
+            }, 100);
+        }
+
+        async function extractAudioToWavBase64(mediaObj, trimStart, trimEnd) {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            const tempCtx = new AudioContext();
+            const res = await fetch(mediaObj.url);
+            const arrayBuffer = await res.arrayBuffer();
+            const audioBuffer = await tempCtx.decodeAudioData(arrayBuffer);
+            
+            const duration = Math.min(trimEnd - trimStart, 300); 
+            const sampleRate = 16000; 
+            const offlineCtx = new OfflineAudioContext(1, duration * sampleRate, sampleRate);
+            const source = offlineCtx.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(offlineCtx.destination);
+            source.start(0, trimStart, duration);
+            
+            const renderedBuffer = await offlineCtx.startRendering();
+            
+            let numOfChan = renderedBuffer.numberOfChannels,
+                length = renderedBuffer.length * numOfChan * 2 + 44,
+                bufferData = new ArrayBuffer(length),
+                view = new DataView(bufferData),
+                channels = [], i, sample, offset = 0, pos = 0;
+
+            function setUint16(data) { view.setUint16(pos, data, true); pos += 2; }
+            function setUint32(data) { view.setUint32(pos, data, true); pos += 4; }
+
+            setUint32(0x46464952); setUint32(length - 8); setUint32(0x45564157); 
+            setUint32(0x20746d66); setUint32(16); setUint16(1); setUint16(numOfChan);
+            setUint32(renderedBuffer.sampleRate); setUint32(renderedBuffer.sampleRate * 2 * numOfChan); 
+            setUint16(numOfChan * 2); setUint16(16); 
+            setUint32(0x61746164); setUint32(length - pos - 4); 
+
+            for (i = 0; i < renderedBuffer.numberOfChannels; i++) channels.push(renderedBuffer.getChannelData(i));
+            while (pos < length) {
+                for (i = 0; i < numOfChan; i++) {
+                    sample = Math.max(-1, Math.min(1, channels[i][offset]));
+                    sample = (0.5 + sample < 0 ? sample * 32768 : sample * 32767) | 0;
+                    view.setInt16(pos, sample, true); pos += 2;
+                }
+                offset++;
+            }
+            const wavBlob = new Blob([bufferData], { type: "audio/wav" });
+            
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(wavBlob);
+                reader.onloadend = () => resolve(reader.result.split(',')[1]);
+            });
+        }
+
+        async function executeAISubtitles() {
+            if(!aiTargetMediaClip || !aiPreviewClip) return;
+            const customStyles = {
+                font: aiPreviewClip.media.font, color: aiPreviewClip.media.color, shadowColor: aiPreviewClip.media.shadowColor,
+                shadowBlur: aiPreviewClip.media.shadowBlur, size: aiPreviewClip.media.size, x: aiPreviewClip.media.x,
+                y: aiPreviewClip.media.y, fadeIn: aiPreviewClip.media.fadeIn, fadeOut: aiPreviewClip.media.fadeOut,
+                opacity: aiPreviewClip.media.opacity !== undefined ? aiPreviewClip.media.opacity : 1,
+                effectIn: aiPreviewClip.media.effectIn || 'fade',
+                effectOut: aiPreviewClip.media.effectOut || 'fade'
+            };
+            const targetClipForAI = aiTargetMediaClip;
+            deleteSelectedClip(); 
+            document.getElementById('aiLoadingOverlay').style.display = 'flex';
+            
+            try {
+                const base64Audio = await extractAudioToWavBase64(targetClipForAI.media, targetClipForAI.trimStart, targetClipForAI.trimEnd);
+                
+                const payload = {
+                    contents: [{
+                        role: "user",
+                        parts: [
+                            {text: "قم بتفريغ هذا الصوت العربي إلى نصوص. يجب أن يكون الرد عبارة عن مصفوفة JSON فقط تحتوي على كائنات بها text و start و end. اجعل الجمل قصيرة للترجمة على الشاشة."},
+                            {inlineData: {mimeType: "audio/wav", data: base64Audio}}
+                        ]
+                    }],
+                    generationConfig: {
+                        responseMimeType: "application/json",
+                    }
+                };
+
+                let responseText = null;
+                let lastError = "";
+                let modelsToTry = ['gemini-1.5-flash', 'gemini-1.5-pro']; 
+
+                try {
+                    const modelsRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${activeKey}`);
+                    const modelsData = await modelsRes.json();
+                    
+                    if (modelsData && modelsData.models) {
+                        modelsToTry = modelsData.models
+                            .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes("generateContent") && m.name.includes("gemini"))
+                            .map(m => m.name.replace('models/', ''));
+                            
+                        modelsToTry.sort((a, b) => {
+                            if (a.includes('1.5') && !b.includes('1.5')) return -1;
+                            if (!a.includes('1.5') && b.includes('1.5')) return 1;
+                            return 0;
+                        });
+                    }
+                } catch(e) {
+                    console.warn("تعذر جلب قائمة النماذج المتاحة، سيتم تجربة النماذج الافتراضية.", e);
+                }
+
+                for (const model of modelsToTry) {
+                    if (responseText) break;
+                    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${activeKey}`;
+                    
+                    for(let i=0; i<2; i++) { 
+                        try {
+                            const res = await fetch(url, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
+                            const data = await res.json();
+                            
+                            if(data.error) {
+                                lastError = data.error.message;
+                                if (data.error.code === 404 || lastError.includes('not found')) break; 
+                                throw new Error(lastError);
+                            }
+                            if(data.candidates && data.candidates[0].content.parts[0].text) {
+                                responseText = data.candidates[0].content.parts[0].text;
+                                break;
+                            }
+                        } catch(e) { 
+                            lastError = e.message;
+                            await new Promise(r => setTimeout(r, 1500 * (i+1))); 
+                        }
+                    }
+                }
+                
+                if(!responseText) throw new Error("فشل الاتصال بالذكاء الاصطناعي: " + lastError);
+                
+                const subtitles = JSON.parse(responseText.replace(/```json/g, '').replace(/```/g, '').trim());
+                addTrack('text', 'ترجمة - ' + targetClipForAI.media.name.slice(0,10));
+                const newTrackId = tracks[tracks.length-1].id;
+                
+                subtitles.forEach(sub => {
+                    const dur = Math.max(0.5, sub.end - sub.start);
+                    const mediaObj = {
+                        id: 'text_' + Date.now() + Math.random(),
+                        type: 'text', name: sub.text, duration: dur, content: sub.text,
+                        ...customStyles 
+                    };
+                    createClip(mediaObj, newTrackId, targetClipForAI.start + sub.start);
+                });
+            } catch (err) {
+                console.error(err);
+                alert("حدث خطأ أثناء إنشاء الترجمة التلقائية: " + err.message);
+            } finally {
+                document.getElementById('aiLoadingOverlay').style.display = 'none';
+            }
+        }
+
+        // --- الشريط الزمني المغناطيسي ---
+        function getSafeStartTime(trackId, desiredStart, visualDuration) {
+            let safeStart = Math.max(0, desiredStart);
+            let hasOverlap = true;
+            while(hasOverlap) {
+                hasOverlap = false;
+                for(let i=0; i<clips.length; i++) {
+                    const c = clips[i];
+                    if(c.trackId === trackId && c.media.type !== 'visualizer') { 
+                        const cStart = c.start;
+                        const cEnd = c.start + ((c.trimEnd - c.trimStart) / c.playbackRate);
+                        if (safeStart < cEnd && (safeStart + visualDuration) > cStart) {
+                            safeStart = cEnd; 
+                            hasOverlap = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            return safeStart;
+        }
+
+        function allowDrop(ev) { ev.preventDefault(); }
+        function drop(ev, trackId) {
+            ev.preventDefault();
+            if(!window.draggedMedia) return;
+            const mediaObj = window.draggedMedia;
+            const targetType = getTrackType(trackId);
+            
+            if (targetType === 'audio' && mediaObj.type !== 'audio') return alert('الرجاء وضع الصوت فقط في مسارات الصوت.');
+            if (targetType === 'video' && mediaObj.type === 'audio') return alert('الرجاء وضع الصوت في مسار الصوت.');
+            if (targetType === 'text' && mediaObj.type !== 'text' && mediaObj.type !== 'visualizer') return alert('هذا المسار مخصص للنصوص والإضافات.');
+
+            const rect = ev.currentTarget.getBoundingClientRect();
+            let x = ev.clientX - rect.left;
+            
+            const rawStart = Math.max(0, x / PIXELS_PER_SECOND);
+            const safeStart = getSafeStartTime(trackId, rawStart, mediaObj.duration);
+            
+            createClip(mediaObj, trackId, safeStart);
+        }
+
+        function createClip(mediaObj, trackId, startTime) {
+            const clipData = {
+                id: 'clip_' + Date.now() + Math.floor(Math.random()*1000),
+                media: mediaObj, trackId: trackId, start: startTime,
+                trimStart: 0, trimEnd: mediaObj.duration, playbackRate: 1, audioSource: null
+            };
+            if(mediaObj.type === 'text' || mediaObj.type === 'visualizer') clipData.media = {...mediaObj}; 
+
+            clips.push(clipData);
+            buildClipDOM(clipData);
+            updateProjectDuration();
+            drawCanvas();
+        }
+
+        function buildClipDOM(clipData) {
+            const trackEl = document.getElementById(clipData.trackId);
+            if(!trackEl) return;
+            const clipEl = document.createElement('div');
+            
+            let bgClass = 'bg-blue-600/80 border-blue-400';
+            if(clipData.media.type === 'audio') bgClass = 'bg-green-600/80 border-green-400';
+            if(clipData.media.type === 'image') bgClass = 'bg-yellow-600/80 border-yellow-400';
+            if(clipData.media.type === 'text') bgClass = 'bg-purple-600/80 border-purple-400';
+            if(clipData.media.type === 'visualizer') bgClass = 'bg-pink-600/80 border-pink-400';
+
+            if (clipData === aiPreviewClip) bgClass += ' ring-2 ring-green-400 animate-pulse';
+
+            clipEl.className = `absolute top-1 bottom-1 rounded border overflow-hidden ${bgClass} cursor-grab active:cursor-grabbing text-[10px] flex items-center px-2 shadow-md box-border`;
+            clipEl.id = clipData.id;
+            
+            const label = document.createElement('span');
+            label.className = 'truncate w-full pointer-events-none select-none text-white drop-shadow-md z-0 text-left';
+            label.dir = "ltr";
+            label.innerText = clipData.media.type === 'text' ? clipData.media.content : clipData.media.name;
+            clipEl.appendChild(label);
+
+            const leftHandle = document.createElement('div'); leftHandle.className = 'clip-handle left';
+            const rightHandle = document.createElement('div'); rightHandle.className = 'clip-handle right';
+            clipEl.appendChild(leftHandle); clipEl.appendChild(rightHandle);
+
+            trackEl.appendChild(clipEl);
+            clipData.element = clipEl;
+
+            updateClipUI(clipData);
+            setupClipInteractions(clipData, clipEl, leftHandle, rightHandle);
+        }
+
+        function updateClipUI(clip) {
+            const visualDuration = (clip.trimEnd - clip.trimStart) / clip.playbackRate;
+            clip.element.style.width = `${visualDuration * PIXELS_PER_SECOND}px`;
+            clip.element.style.left = `${clip.start * PIXELS_PER_SECOND}px`;
+            if(clip.media.type === 'text') clip.element.querySelector('span').innerText = clip.media.content;
+        }
+
+        function updateProjectDuration() {
+            let maxEnd = 0;
+            clips.forEach(c => {
+                const end = c.start + ((c.trimEnd - c.trimStart) / c.playbackRate);
+                if (end > maxEnd) maxEnd = end;
+            });
+            duration = Math.max(10, maxEnd + 2);
+            document.getElementById('totalTimeDisplay').innerText = formatTime(maxEnd);
+            drawRuler();
+        }
+
+        function setupClipInteractions(clip, clipEl, leftHandle, rightHandle) {
+            let isDragging=false, isTrimmingLeft=false, isTrimmingRight=false;
+            let startX=0, initialStart=0, initialTrimStart=0, initialTrimEnd=0;
+            let snapPoints = [];
+            const SNAP_THRESHOLD = 0.2; 
+
+            function calcTrackBounds(targetTrackId) {
+                let maxL = 0, minR = Infinity;
+                if (clip.media.type !== 'visualizer') {
+                    const currentMid = initialStart + ((initialTrimEnd - initialTrimStart) / clip.playbackRate) / 2;
+                    clips.forEach(c => {
+                        if (c.trackId === targetTrackId && c.id !== clip.id && c.media.type !== 'visualizer') {
+                            const cStart = c.start;
+                            const cEnd = c.start + ((c.trimEnd - c.trimStart) / c.playbackRate);
+                            const cMid = cStart + (cEnd - cStart) / 2;
+                            if (cMid < currentMid) maxL = Math.max(maxL, cEnd);
+                            else minR = Math.min(minR, cStart);
+                        }
+                    });
+                }
+                return {maxLeftBound: maxL, minRightBound: minR};
+            }
+
+            function applySnap(time) {
+                let closestTime = time;
+                let minDiff = SNAP_THRESHOLD;
+                let snapped = false;
+                snapPoints.forEach(p => {
+                    const diff = Math.abs(time - p);
+                    if(diff < minDiff) {
+                        minDiff = diff;
+                        closestTime = p;
+                        snapped = true;
+                    }
+                });
+                return { time: closestTime, snapped: snapped };
+            }
+
+            const handleStart = (e) => {
+                if(e.type === 'mousedown' && e.button !== 0) return;
+                selectClip(clip);
+                if(e.target === leftHandle) isTrimmingLeft = true;
+                else if(e.target === rightHandle) isTrimmingRight = true;
+                else isDragging = true;
+
+                startX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+                initialStart = clip.start;
+                initialTrimStart = clip.trimStart;
+                initialTrimEnd = clip.trimEnd;
+                
+                snapPoints = [0, currentTime]; 
+                clips.forEach(c => {
+                    if (c.id !== clip.id) {
+                        snapPoints.push(c.start);
+                        snapPoints.push(c.start + ((c.trimEnd - c.trimStart) / c.playbackRate));
+                    }
+                });
+
+                document.addEventListener('mousemove', handleMove);
+                document.addEventListener('mouseup', handleEnd);
+                document.addEventListener('touchmove', handleMove, {passive: false});
+                document.addEventListener('touchend', handleEnd);
+                e.stopPropagation();
+            };
+
+            const handleMove = (e) => {
+                if(!isDragging && !isTrimmingLeft && !isTrimmingRight) return;
+                
+                const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+                const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+                const dx = clientX - startX;
+                let dt = dx / PIXELS_PER_SECOND;
+                
+                let isSnappedVisual = false;
+                let snapPosPx = 0;
+
+                if (isDragging) {
+                    const elementsUnderCursor = document.elementsFromPoint(clientX, clientY);
+                    const hoverTrackEl = elementsUnderCursor.find(el => el.classList.contains('timeline-grid'));
+                    
+                    if (hoverTrackEl && hoverTrackEl.id !== clip.trackId) {
+                        const targetType = getTrackType(hoverTrackEl.id);
+                        const mediaType = clip.media.type;
+                        let isValid = false;
+                        
+                        if (targetType === 'audio' && mediaType === 'audio') isValid = true;
+                        if (targetType === 'video' && (mediaType === 'video' || mediaType === 'image')) isValid = true;
+                        if (targetType === 'text' && (mediaType === 'text' || mediaType === 'visualizer')) isValid = true;
+
+                        if(isValid) {
+                            clip.trackId = hoverTrackEl.id;
+                            hoverTrackEl.appendChild(clipEl);
+                        }
+                    }
+
+                    const bounds = calcTrackBounds(clip.trackId);
+                    const visualDuration = (clip.trimEnd - clip.trimStart) / clip.playbackRate;
+                    let proposedStart = initialStart + dt;
+                    
+                    let snapStart = applySnap(proposedStart);
+                    let snapEnd = applySnap(proposedStart + visualDuration);
+                    
+                    if (snapStart.snapped) {
+                        proposedStart = snapStart.time;
+                        isSnappedVisual = true;
+                        snapPosPx = proposedStart * PIXELS_PER_SECOND;
+                    } else if (snapEnd.snapped) {
+                        proposedStart = snapEnd.time - visualDuration;
+                        isSnappedVisual = true;
+                        snapPosPx = snapEnd.time * PIXELS_PER_SECOND;
+                    }
+
+                    proposedStart = Math.max(bounds.maxLeftBound, Math.min(proposedStart, bounds.minRightBound - visualDuration));
+                    clip.start = Math.max(0, proposedStart);
+                    
+                } 
+                else if (isTrimmingLeft) {
+                    const bounds = calcTrackBounds(clip.trackId);
+                    const dtInternal = dt * clip.playbackRate;
+                    const absoluteMin = initialTrimStart - (initialStart * clip.playbackRate);
+                    const minAllowedByMedia = (clip.media.type === 'text' || clip.media.type === 'image' || clip.media.type === 'visualizer') ? absoluteMin : Math.max(0, absoluteMin);
+                    
+                    let proposedStart = initialStart + dt;
+                    let snapStart = applySnap(proposedStart);
+                    if (snapStart.snapped) {
+                        proposedStart = Math.max(0, snapStart.time);
+                        isSnappedVisual = true;
+                        snapPosPx = proposedStart * PIXELS_PER_SECOND;
+                    }
+
+                    if (proposedStart < bounds.maxLeftBound) proposedStart = bounds.maxLeftBound;
+                    
+                    let newTrimStart = initialTrimStart + ((proposedStart - initialStart) * clip.playbackRate);
+                    newTrimStart = Math.max(minAllowedByMedia, Math.min(clip.trimEnd - 0.2, newTrimStart));
+                    
+                    clip.trimStart = newTrimStart;
+                    clip.start = initialStart + ((newTrimStart - initialTrimStart) / clip.playbackRate);
+                }
+                else if (isTrimmingRight) {
+                    const bounds = calcTrackBounds(clip.trackId);
+                    const initialVisualDuration = (initialTrimEnd - initialTrimStart) / clip.playbackRate;
+                    let proposedEnd = initialStart + initialVisualDuration + dt;
+                    
+                    let snapEnd = applySnap(proposedEnd);
+                    if(snapEnd.snapped) {
+                        proposedEnd = snapEnd.time;
+                        isSnappedVisual = true;
+                        snapPosPx = proposedEnd * PIXELS_PER_SECOND;
+                    }
+
+                    let maxDt = Math.min(bounds.minRightBound, proposedEnd) - (initialStart + initialVisualDuration);
+                    
+                    const dtInternal = maxDt * clip.playbackRate;
+                    const maxAllowedMedia = (clip.media.type === 'text' || clip.media.type === 'image' || clip.media.type === 'visualizer') ? Number.MAX_SAFE_INTEGER : clip.media.duration;
+                    
+                    clip.trimEnd = Math.max(clip.trimStart + 0.2, Math.min(maxAllowedMedia, initialTrimEnd + dtInternal));
+                }
+
+                const guide = document.getElementById('snapGuideLine');
+                if (isSnappedVisual) {
+                    guide.style.left = `${snapPosPx + 80}px`; 
+                    guide.style.display = 'block';
+                } else {
+                    guide.style.display = 'none';
+                }
+
+                updateClipUI(clip);
+                updateProjectDuration();
+                if(!isPlaying) { currentTime = clip.start; updatePlayheadUI(); drawCanvas(); }
+            };
+
+            const handleEnd = () => {
+                isDragging = false; isTrimmingLeft = false; isTrimmingRight = false;
+                document.getElementById('snapGuideLine').style.display = 'none';
+                document.removeEventListener('mousemove', handleMove);
+                document.removeEventListener('mouseup', handleEnd);
+                document.removeEventListener('touchmove', handleMove);
+                document.removeEventListener('touchend', handleEnd);
+            };
+
+            clipEl.addEventListener('mousedown', handleStart);
+            clipEl.addEventListener('touchstart', handleStart, {passive: false});
+        }
+
+        // --- الخصائص ---
+        function selectClip(clip) {
+            selectedClip = clip;
+            clips.forEach(c => c.element.classList.remove('ring-2', 'ring-white', 'z-30'));
+            clip.element.classList.add('ring-2', 'ring-white', 'z-30');
+            
+            document.getElementById('propertiesPanel').classList.remove('hidden');
+            document.getElementById('propertiesPanel').classList.add('flex');
+            
+            document.getElementById('aiSubtitleBtn').style.display = 'none';
+            document.getElementById('confirmAIBtn').style.display = 'none';
+            document.getElementById('btnAnimateImage').style.display = 'none';
+            document.getElementById('btnCaptureFrame').style.display = 'none';
+            document.getElementById('btnCreateVisualizer').style.display = 'none';
+            
+            document.getElementById('textProps').classList.add('hidden');
+            document.getElementById('mediaProps').classList.add('hidden');
+            document.getElementById('visProps').classList.add('hidden');
+            
+            if(clip.media.type === 'visualizer') {
+                document.getElementById('visProps').classList.remove('hidden');
+                document.getElementById('visProps').classList.add('flex');
+                
+                document.getElementById('visShapeProp').value = clip.media.shape;
+                document.getElementById('visColorProp').value = clip.media.color;
+                document.getElementById('visOpacityProp').value = clip.media.opacity;
+                document.getElementById('visSizeProp').value = clip.media.size;
+                document.getElementById('visMaxHeightProp').value = clip.media.maxHeight !== undefined ? clip.media.maxHeight : 1;
+                document.getElementById('visRadiusProp').value = clip.media.radius !== undefined ? clip.media.radius : 100;
+                document.getElementById('visXProp').value = clip.media.x;
+                document.getElementById('visYProp').value = clip.media.y;
+            }
+            else if(clip.media.type === 'text') {
+                document.getElementById('textProps').classList.remove('hidden');
+                document.getElementById('textProps').classList.add('flex');
+                
+                document.getElementById('textContent').value = clip.media.content;
+                document.getElementById('textFont').value = clip.media.font;
+                document.getElementById('textSize').value = clip.media.size;
+                document.getElementById('textSizeDisplay').innerText = clip.media.size;
+                document.getElementById('textColor').value = clip.media.color;
+                document.getElementById('textShadowColor').value = clip.media.shadowColor || '#000000';
+                document.getElementById('textShadowBlur').value = clip.media.shadowBlur !== undefined ? clip.media.shadowBlur : 10;
+                document.getElementById('textShadowBlurDisplay').innerText = document.getElementById('textShadowBlur').value;
+                document.getElementById('textX').value = clip.media.x;
+                document.getElementById('textY').value = clip.media.y;
+                document.getElementById('textFadeIn').value = clip.media.fadeIn;
+                document.getElementById('textFadeOut').value = clip.media.fadeOut;
+                
+                document.getElementById('textOpacity').value = clip.media.opacity !== undefined ? clip.media.opacity : 1;
+                document.getElementById('textOpacityDisplay').innerText = document.getElementById('textOpacity').value;
+                document.getElementById('textEffectIn').value = clip.media.effectIn || 'fade';
+                document.getElementById('textEffectOut').value = clip.media.effectOut || 'fade';
+                
+                if(clip === aiPreviewClip) document.getElementById('confirmAIBtn').style.display = 'flex';
+                
+            } else {
+                document.getElementById('mediaProps').classList.remove('hidden');
+                document.getElementById('mediaProps').classList.add('flex');
+                
+                document.getElementById('speedSlider').value = clip.playbackRate;
+                document.getElementById('speedValueDisplay').innerText = clip.playbackRate + 'x';
+                document.getElementById('speedSlider').disabled = (clip.media.type === 'image');
+                
+                // إعدادات الصوت
+                if (clip.media.type === 'video' || clip.media.type === 'audio') {
+                    document.getElementById('audioSettingsProps').style.display = 'flex';
+                    document.getElementById('audioVolume').value = clip.media.volume !== undefined ? clip.media.volume : 1;
+                    document.getElementById('audioVolumeDisplay').innerText = Math.round((clip.media.volume !== undefined ? clip.media.volume : 1) * 100) + '%';
+                    document.getElementById('audioFadeIn').value = clip.media.audioFadeIn || 0;
+                    document.getElementById('audioFadeOut').value = clip.media.audioFadeOut || 0;
+                    document.getElementById('audioStartVolume').value = clip.media.audioStartVolume || 0;
+                    document.getElementById('audioStartVolumeDisplay').innerText = Math.round((clip.media.audioStartVolume || 0) * 100) + '%';
+                } else {
+                    document.getElementById('audioSettingsProps').style.display = 'none';
+                }
+
+                // إعدادات الكتم والإخفاء
+                document.getElementById('muteToggle').checked = clip.media.isMuted === true;
+                document.getElementById('hideVideoToggle').checked = clip.media.isHidden === true;
+                document.getElementById('hideVideoToggleContainer').style.display = (clip.media.type === 'video') ? 'flex' : 'none';
+
+                // إعدادات التحجيم والمكان
+                document.getElementById('mediaScale').value = clip.media.scale !== undefined ? clip.media.scale : 100;
+                document.getElementById('mediaX').value = clip.media.x !== undefined ? clip.media.x : 50;
+                document.getElementById('mediaY').value = clip.media.y !== undefined ? clip.media.y : 50;
+                
+                const fitMode = clip.media.fitMode || 'contain';
+                document.getElementById('btnFitContain').className = fitMode === 'contain' ? 'flex-1 bg-blue-600 text-white text-[10px] py-1.5 rounded transition border border-transparent' : 'flex-1 bg-gray-700 hover:bg-gray-600 text-white text-[10px] py-1.5 rounded transition border border-transparent';
+                document.getElementById('btnFitCover').className = fitMode === 'cover' ? 'flex-1 bg-blue-600 text-white text-[10px] py-1.5 rounded transition border border-transparent' : 'flex-1 bg-gray-700 hover:bg-gray-600 text-white text-[10px] py-1.5 rounded transition border border-transparent';
+
+                // حركات الدخول والخروج للصور والفيديو
+                if (clip.media.type === 'image' || clip.media.type === 'video') {
+                    document.getElementById('visualAnimProps').style.display = 'flex';
+                    document.getElementById('mediaEffectIn').value = clip.media.effectIn || 'none';
+                    document.getElementById('mediaEffectOut').value = clip.media.effectOut || 'none';
+                    document.getElementById('mediaFadeIn').value = clip.media.fadeIn || 0;
+                    document.getElementById('mediaFadeOut').value = clip.media.fadeOut || 0;
+                } else {
+                    document.getElementById('visualAnimProps').style.display = 'none';
+                }
+
+                document.getElementById('reactiveSelect').value = clip.media.reactiveEffect || 'none';
+                document.getElementById('reactiveIntensity').value = clip.media.reactiveIntensity !== undefined ? clip.media.reactiveIntensity : 1;
+                document.getElementById('reactiveSensitivity').value = clip.media.reactiveSensitivity !== undefined ? clip.media.reactiveSensitivity : 50;
+                
+                // إعدادات التأثيرات البيئية
+                document.getElementById('overlaySelect').value = clip.media.overlayEffect || 'none';
+                if (clip.media.overlayEffect && clip.media.overlayEffect !== 'none') {
+                    document.getElementById('overlaySettingsContainer').style.display = 'flex';
+                    document.getElementById('overlayOpacity').value = clip.media.overlayOpacity !== undefined ? clip.media.overlayOpacity : 0.5;
+                    document.getElementById('overlaySize').value = clip.media.overlaySize !== undefined ? clip.media.overlaySize : 1;
+                    document.getElementById('overlaySpeed').value = clip.media.overlaySpeed !== undefined ? clip.media.overlaySpeed : 1;
+                    document.getElementById('overlayColor').value = clip.media.overlayColor || '#ffffff';
+                    
+                    document.getElementById('overlayOpVal').innerText = document.getElementById('overlayOpacity').value;
+                    document.getElementById('overlaySzVal').innerText = document.getElementById('overlaySize').value;
+                    document.getElementById('overlaySpdVal').innerText = document.getElementById('overlaySpeed').value;
+
+                    if (clip.media.overlayEffect === 'oldfilm') {
+                        document.getElementById('oldFilmSettings').style.display = 'flex';
+                        document.getElementById('overlayOldFilmTint').checked = clip.media.overlayOldFilmTint !== false;
+                    } else {
+                        document.getElementById('oldFilmSettings').style.display = 'none';
+                    }
+                } else {
+                    document.getElementById('overlaySettingsContainer').style.display = 'none';
+                }
+                
+                if (clip.media.type === 'image' || clip.media.type === 'video') {
+                    document.getElementById('transformProps').style.display = 'flex';
+                    document.getElementById('reactiveSelectContainer').style.display = 'flex';
+                    document.getElementById('overlaySelectContainer').style.display = 'flex';
+                } else {
+                    document.getElementById('transformProps').style.display = 'none';
+                    document.getElementById('reactiveSelectContainer').style.display = 'none';
+                    document.getElementById('overlaySelectContainer').style.display = 'none';
+                }
+
+                if (clip.media.type === 'video' || clip.media.type === 'audio') {
+                    document.getElementById('aiSubtitleBtn').style.display = 'flex';
+                    document.getElementById('btnCreateVisualizer').style.display = 'flex';
+                }
+                if (clip.media.type === 'image') document.getElementById('btnAnimateImage').style.display = 'flex';
+                if (clip.media.type === 'video') document.getElementById('btnCaptureFrame').style.display = 'flex';
+            }
+        }
+
+        function changeProp(prop, value) {
+            if(!selectedClip) return;
+            
+            if (prop === 'isMuted' || prop === 'isHidden' || prop === 'overlayOldFilmTint') {
+                selectedClip.media[prop] = value;
+            } else if(prop === 'speed') {
+                selectedClip.playbackRate = parseFloat(value);
+                document.getElementById('speedValueDisplay').innerText = value + 'x';
+            } else if(prop === 'fitMode') {
+                selectedClip.media.fitMode = value;
+                document.getElementById('btnFitContain').className = value === 'contain' ? 'flex-1 bg-blue-600 text-white text-[10px] py-1.5 rounded transition border border-transparent' : 'flex-1 bg-gray-700 hover:bg-gray-600 text-white text-[10px] py-1.5 rounded transition border border-transparent';
+                document.getElementById('btnFitCover').className = value === 'cover' ? 'flex-1 bg-blue-600 text-white text-[10px] py-1.5 rounded transition border border-transparent' : 'flex-1 bg-gray-700 hover:bg-gray-600 text-white text-[10px] py-1.5 rounded transition border border-transparent';
+            } else if(prop === 'overlayEffect') {
+                selectedClip.media[prop] = value;
+                if(value === 'dust') { selectedClip.media.overlayColor = '#ffffff'; selectedClip.media.overlayOpacity = 0.5; }
+                else if(value === 'rain') { selectedClip.media.overlayColor = '#c8c8ff'; selectedClip.media.overlayOpacity = 0.5; }
+                else if(value === 'oldfilm') { selectedClip.media.overlayColor = '#000000'; selectedClip.media.overlayOpacity = 0.5; selectedClip.media.overlayOldFilmTint = true; }
+                selectClip(selectedClip);
+            } else if (prop === 'overlayColor' || prop === 'effectIn' || prop === 'effectOut' || prop === 'content' || prop === 'font' || prop === 'color' || prop === 'shadowColor' || prop === 'shape') {
+                selectedClip.media[prop] = value;
+            } else {
+                if(['size', 'scale', 'x', 'y', 'fadeIn', 'fadeOut', 'shadowBlur', 'opacity', 'maxHeight', 'radius', 'reactiveIntensity', 'reactiveSensitivity', 'overlayOpacity', 'overlaySize', 'overlaySpeed', 'volume', 'audioFadeIn', 'audioFadeOut', 'audioStartVolume'].includes(prop)) value = parseFloat(value);
+                selectedClip.media[prop] = value;
+                if(prop === 'size') document.getElementById('textSizeDisplay').innerText = value;
+                if(prop === 'shadowBlur') document.getElementById('textShadowBlurDisplay').innerText = value;
+                if(prop === 'opacity' && selectedClip.media.type === 'text') document.getElementById('textOpacityDisplay').innerText = value;
+                if(prop === 'overlayOpacity') document.getElementById('overlayOpVal').innerText = value;
+                if(prop === 'overlaySize') document.getElementById('overlaySzVal').innerText = value;
+                if(prop === 'overlaySpeed') document.getElementById('overlaySpdVal').innerText = value;
+                if(prop === 'volume') document.getElementById('audioVolumeDisplay').innerText = Math.round(value * 100) + '%';
+                if(prop === 'audioStartVolume') document.getElementById('audioStartVolumeDisplay').innerText = Math.round(value * 100) + '%';
+            }
+            updateClipUI(selectedClip);
+            updateProjectDuration();
+            drawCanvas();
+        }
+
+        function setProjectSizeToClip() {
+            if (!selectedClip || !selectedClip.media.element) return;
+            const w = selectedClip.media.element.videoWidth || selectedClip.media.element.naturalWidth;
+            const h = selectedClip.media.element.videoHeight || selectedClip.media.element.naturalHeight;
+            if (w && h) {
+                canvas.width = w;
+                canvas.height = h;
+                const opt = document.getElementById('customResolutionOption');
+                opt.value = `${w}x${h}`;
+                opt.innerText = `مخصص (${w}x${h})`;
+                opt.style.display = 'block';
+                document.getElementById('resolutionSelect').value = `${w}x${h}`;
+                drawCanvas();
+            }
+        }
+
+        function deleteSelectedClip() {
+            if(!selectedClip) return;
+            if (selectedClip === aiPreviewClip) { aiPreviewClip = null; aiTargetMediaClip = null; }
+            selectedClip.element.remove();
+            clips = clips.filter(c => c.id !== selectedClip.id);
+            selectedClip = null;
+            document.getElementById('propertiesPanel').classList.add('hidden');
+            document.getElementById('propertiesPanel').classList.remove('flex');
+            updateProjectDuration();
+            drawCanvas();
+        }
+
+        function splitSelectedClip() {
+            if (!selectedClip) return alert("حدد مقطعاً أولاً.");
+            const c = selectedClip;
+            const visualDuration = (c.trimEnd - c.trimStart) / c.playbackRate;
+            if (currentTime <= c.start || currentTime >= c.start + visualDuration) return alert("المؤشر لا يقع على المقطع المكتمل!");
+            
+            const internalCutTime = c.trimStart + ((currentTime - c.start) * c.playbackRate);
+            const newClip = {
+                id: 'clip_' + Date.now() + Math.floor(Math.random()*1000),
+                media: (c.media.type === 'text' || c.media.type === 'visualizer') ? {...c.media} : c.media,
+                trackId: c.trackId, start: currentTime,
+                trimStart: internalCutTime, trimEnd: c.trimEnd,
+                playbackRate: c.playbackRate, audioSource: null
+            };
+            
+            c.trimEnd = internalCutTime;
+            clips.push(newClip);
+            buildClipDOM(newClip);
+            updateClipUI(c);
+            updateProjectDuration();
+            drawCanvas();
+        }
+
+        async function captureLastFrame() {
+            if(!selectedClip || selectedClip.media.type !== 'video') return;
+            const btn = document.getElementById('btnCaptureFrame');
+            const originalText = btn.innerHTML;
+            btn.innerText = 'جاري الالتقاط...';
+
+            const vid = selectedClip.media.element;
+            const targetTime = Math.max(0, selectedClip.trimEnd - 0.05); 
+            const originalTime = vid.currentTime;
+
+            await new Promise((resolve) => {
+                const onSeeked = () => { vid.removeEventListener('seeked', onSeeked); resolve(); };
+                vid.addEventListener('seeked', onSeeked);
+                setTimeout(() => { vid.removeEventListener('seeked', onSeeked); resolve(); }, 500); 
+                vid.currentTime = targetTime;
+            });
+
+            const cvs = document.createElement('canvas');
+            cvs.width = vid.videoWidth || 1280;
+            cvs.height = vid.videoHeight || 720;
+            const cctx = cvs.getContext('2d');
+            cctx.drawImage(vid, 0, 0, cvs.width, cvs.height);
+
+            const dataUrl = cvs.toDataURL('image/png');
+
+            const mediaObj = {
+                id: 'captured_img_' + Date.now(),
+                name: 'إطار ' + selectedClip.media.name.slice(0, 10),
+                url: dataUrl, type: 'image', element: new Image(), duration: 3, reactiveEffect: 'none', overlayEffect: 'none',
+                scale: 100, x: 50, y: 50, fitMode: 'contain', isHidden: false, effectIn: 'none', effectOut: 'none', fadeIn: 0, fadeOut: 0
+            };
+            mediaObj.element.src = dataUrl;
+            libraryMap.set(mediaObj.id, mediaObj);
+            addToLibrary(mediaObj);
+
+            const visualDuration = (selectedClip.trimEnd - selectedClip.trimStart) / selectedClip.playbackRate;
+            const insertTime = selectedClip.start + visualDuration;
+            const safeStart = getSafeStartTime(selectedClip.trackId, insertTime, mediaObj.duration);
+
+            createClip(mediaObj, selectedClip.trackId, safeStart);
+            vid.currentTime = originalTime; 
+            btn.innerHTML = originalText;
+        }
+
+        function openAiVideoModalFromProps() {
+            if(!selectedClip || selectedClip.media.type !== 'image') return;
+            openAiVideoModal(selectedClip.media.element.src);
+        }
+
+        // --- التحكم ---
+        function changeResolution() {
+            const val = document.getElementById('resolutionSelect').value;
+            if(val === 'custom') return;
+            const [w, h] = val.split('x');
+            canvas.width = parseInt(w);
+            canvas.height = parseInt(h);
+            drawCanvas();
+        }
+        function changeCanvasZoom(delta) {
+            canvasZoomLevel = Math.max(0.1, Math.min(5, canvasZoomLevel + delta));
+            canvas.style.transform = `scale(${canvasZoomLevel})`;
+            document.getElementById('canvasZoomDisplay').innerText = Math.round(canvasZoomLevel * 100) + '%';
+        }
+        function resetCanvasZoom() { canvasZoomLevel = 1; canvas.style.transform = `scale(1)`; document.getElementById('canvasZoomDisplay').innerText = '100%'; }
+        function changeTimelineZoom(val) { PIXELS_PER_SECOND = parseInt(val); drawRuler(); clips.forEach(c => updateClipUI(c)); updatePlayheadUI(); }
+
+        function formatTime(secs) {
+            const m = Math.floor(secs / 60).toString().padStart(2, '0');
+            const s = Math.floor(secs % 60).toString().padStart(2, '0');
+            const ms = Math.floor((secs % 1) * 10).toString();
+            return `${m}:${s}.${ms}`;
+        }
+
+        function updatePlayheadUI() {
+            const px = currentTime * PIXELS_PER_SECOND;
+            document.getElementById('playhead').style.left = `${px}px`;
+            document.getElementById('playheadLine').style.left = `${px + 80}px`;
+            document.getElementById('currentTimeDisplay').innerText = formatTime(currentTime);
+            
+            const container = timelineContainer;
+            if ((px + 80) > container.scrollLeft + container.clientWidth - 50) {
+                container.scrollLeft = (px + 80) - container.clientWidth + 100;
+            } else if ((px + 80) < container.scrollLeft + 80) {
+                container.scrollLeft = Math.max(0, px - 50);
+            }
+        }
+
+        document.getElementById('timeRuler').addEventListener('mousedown', (e) => {
+            if(isExporting) return; 
+            const rect = e.currentTarget.getBoundingClientRect();
+            currentTime = Math.max(0, (e.clientX - rect.left) / PIXELS_PER_SECOND);
+            updatePlayheadUI(); drawCanvas();
+            
+            const moveHandler = (me) => {
+                currentTime = Math.max(0, (me.clientX - rect.left) / PIXELS_PER_SECOND);
+                updatePlayheadUI(); drawCanvas();
+            };
+            const upHandler = () => { document.removeEventListener('mousemove', moveHandler); document.removeEventListener('mouseup', upHandler); };
+            document.addEventListener('mousemove', moveHandler); document.addEventListener('mouseup', upHandler);
+        });
+
+        function togglePlay() {
+            if(isExporting) return; 
+            initAudio();
+            if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+
+            isPlaying = !isPlaying;
+            document.getElementById('playBtn').innerHTML = isPlaying ? 
+                '<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>' : 
+                '<svg class="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"></path></svg>';
+            
+            if (isPlaying) { lastTime = performance.now(); animationFrameId = requestAnimationFrame(renderLoop); } 
+            else { cancelAnimationFrame(animationFrameId); pauseAllMedia(); }
+        }
+
+        function pauseAllMedia() {
+            clips.forEach(clip => {
+                if(clip.media.element && typeof clip.media.element.pause === 'function') clip.media.element.pause();
+            });
+        }
+
+        let lastTime = 0;
+        function renderLoop(now) {
+            if (!isPlaying && !isExporting) return;
+            
+            const dt = (now - lastTime) / 1000;
+            lastTime = now;
+            currentTime += dt;
+            
+            updatePlayheadUI();
+            drawCanvas();
+
+            let maxDuration = 0;
+            clips.forEach(c => { const end = c.start + ((c.trimEnd - c.trimStart)/c.playbackRate); if (end > maxDuration) maxDuration = end; });
+            
+            if (isExporting) {
+                document.getElementById('exportProgress').style.width = `${Math.min(100, (currentTime / maxDuration) * 100)}%`;
+                if (currentTime >= maxDuration && maxDuration > 0) {
+                    exportRecorder.stop();
+                    isExporting = false;
+                    isPlaying = false;
+                    pauseAllMedia();
+                    currentTime = 0;
+                    updatePlayheadUI(); drawCanvas();
+                    return;
+                }
+            } else {
+                if (currentTime >= maxDuration && maxDuration > 0) {
+                    currentTime = 0;
+                    togglePlay();
+                    updatePlayheadUI(); drawCanvas();
+                    return;
+                }
+            }
+            if(isPlaying || isExporting) animationFrameId = requestAnimationFrame(renderLoop);
+        }
+
+        // --- محرك الرسم ومعالجة الصوتيات ---
+        function drawCanvas() {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const activeClips = clips.filter(clip => {
+                const dur = (clip.trimEnd - clip.trimStart) / clip.playbackRate;
+                return currentTime >= clip.start && currentTime < clip.start + dur;
+            });
+
+            // إيقاف المقاطع غير النشطة
+            clips.forEach(clip => {
+                if (clip.media.type !== 'image' && clip.media.type !== 'text' && clip.media.type !== 'visualizer' && !activeClips.includes(clip)) {
+                    if (!clip.media.element.paused) clip.media.element.pause();
+                }
+            });
+
+            // معالجة الصوت (مستوى الصوت، التدرج، الكتم) لجميع المقاطع النشطة
+            activeClips.forEach(clip => {
+                if(clip.media.gainNode) {
+                    const timeInClip = currentTime - clip.start;
+                    const dur = (clip.trimEnd - clip.trimStart) / clip.playbackRate;
+                    let targetVol = clip.media.volume !== undefined ? clip.media.volume : 1;
+
+                    if (clip.media.isMuted) {
+                        targetVol = 0;
+                    } else {
+                        const fadeIn = clip.media.audioFadeIn || 0;
+                        const fadeOut = clip.media.audioFadeOut || 0;
+                        const startVol = clip.media.audioStartVolume || 0;
+
+                        if (timeInClip < fadeIn && fadeIn > 0) {
+                            targetVol = startVol + (targetVol - startVol) * (timeInClip / fadeIn);
+                        } else if (timeInClip > dur - fadeOut && fadeOut > 0) {
+                            targetVol = startVol + (targetVol - startVol) * ((dur - timeInClip) / fadeOut);
+                        }
+                    }
+                    clip.media.gainNode.gain.value = targetVol; // التحديث المباشر للمتصفح
+                }
+            });
+
+            // رسم الفيديوهات والصور
+            const videoClips = activeClips.filter(c => getTrackType(c.trackId) !== 'text' && getTrackType(c.trackId) !== 'audio');
+            videoClips.sort((a, b) => tracks.findIndex(t=>t.id===b.trackId) - tracks.findIndex(t=>t.id===a.trackId)); 
+            
+            videoClips.forEach(clip => {
+                const internalTime = clip.trimStart + ((currentTime - clip.start) * clip.playbackRate);
+                if (clip.media.type === 'video') {
+                    const vid = clip.media.element;
+                    vid.playbackRate = clip.playbackRate;
+                    if (Math.abs(vid.currentTime - internalTime) > 0.25) vid.currentTime = internalTime;
+                    if (isPlaying && vid.paused) vid.play().catch(e=>{});
+                    else if (!isPlaying && !vid.paused) vid.pause();
+                    drawToFit(vid, clip);
+                } 
+                else if (clip.media.type === 'image') drawToFit(clip.media.element, clip);
+            });
+
+            // مزامنة الصوت المستقل
+            activeClips.filter(c => getTrackType(c.trackId) === 'audio').forEach(clip => {
+                const aud = clip.media.element;
+                const internalTime = clip.trimStart + ((currentTime - clip.start) * clip.playbackRate);
+                aud.playbackRate = clip.playbackRate;
+                if (Math.abs(aud.currentTime - internalTime) > 0.25) aud.currentTime = internalTime;
+                if (isPlaying && aud.paused) aud.play().catch(e=>{});
+                else if (!isPlaying && !aud.paused) aud.pause();
+            });
+
+            // النصوص والمخططات
+            activeClips.filter(c => getTrackType(c.trackId) === 'text' || c.media.type === 'visualizer').forEach(clip => {
+                if (clip.media.type === 'visualizer') {
+                    const { shape, color, opacity, size, x, y } = clip.media;
+                    const maxHeightMult = clip.media.maxHeight !== undefined ? clip.media.maxHeight : 1;
+                    const baseRadius = clip.media.radius !== undefined ? clip.media.radius : 100;
+                    
+                    ctx.save();
+                    ctx.globalAlpha = opacity;
+                    ctx.fillStyle = color;
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 3;
+
+                    const pxX = (x / 100) * canvas.width;
+                    const pxY = (y / 100) * canvas.height;
+                    const scale = size / 100;
+                    
+                    if (globalAnalyser) {
+                        if (shape === 'wave') globalAnalyser.getByteTimeDomainData(dataArray);
+                        else globalAnalyser.getByteFrequencyData(dataArray);
+                        
+                        if (shape === 'bars') {
+                            const numBars = 64; 
+                            const barWidth = (canvas.width * scale) / numBars;
+                            for(let i = 0; i < numBars; i++) {
+                                const barHeight = (dataArray[i] / 255) * (canvas.height * scale * 0.5) * maxHeightMult;
+                                ctx.fillRect(pxX + (i * barWidth) - ((numBars * barWidth)/2), pxY - barHeight, barWidth - 2, barHeight);
+                            }
+                        } else if (shape === 'circle') {
+                            const numBars = 64;
+                            const radius = baseRadius * scale;
+                            for(let i = 0; i < numBars; i++) {
+                                const barHeight = (dataArray[i] / 255) * (150 * scale) * maxHeightMult;
+                                const angle = (i / numBars) * Math.PI * 2;
+                                ctx.save();
+                                ctx.translate(pxX, pxY);
+                                ctx.rotate(angle);
+                                ctx.fillRect(-2 * scale, radius, 4 * scale, barHeight);
+                                ctx.restore();
+                            }
+                        } else if (shape === 'wave') {
+                            ctx.beginPath();
+                            const sliceWidth = (canvas.width * scale * 2) / dataArray.length;
+                            let dx = pxX - ((dataArray.length * sliceWidth)/2);
+                            for(let i = 0; i < dataArray.length; i++) {
+                                const v = (dataArray[i] - 128) / 128.0; 
+                                const dy = pxY + (v * 100 * scale * maxHeightMult);
+                                if(i === 0) ctx.moveTo(dx, dy);
+                                else ctx.lineTo(dx, dy);
+                                dx += sliceWidth;
+                            }
+                            ctx.stroke();
+                        }
+                    }
+                    ctx.restore();
+                } else if (clip.media.type === 'text') {
+                    const dur = (clip.trimEnd - clip.trimStart) / clip.playbackRate; 
+                    const timeInClip = currentTime - clip.start;
+                    
+                    const fadeIn = clip.media.fadeIn !== undefined ? clip.media.fadeIn : 0.1;
+                    const fadeOut = clip.media.fadeOut !== undefined ? clip.media.fadeOut : 0.1;
+                    const effectIn = clip.media.effectIn || 'fade';
+                    const effectOut = clip.media.effectOut || 'fade';
+                    
+                    let opacity = 1;
+                    let scaleXY = 1;
+                    let offsetX = 0;
+                    let offsetY = 0;
+                    let displayText = clip.media.content;
+
+                    if (timeInClip < fadeIn && fadeIn > 0) {
+                        const p = timeInClip / fadeIn; 
+                        if (effectIn === 'fade') { opacity = p; }
+                        else if (effectIn === 'zoom') { opacity = p; scaleXY = 0.5 + (0.5 * p); }
+                        else if (effectIn === 'slideUp') { opacity = p; offsetY = 50 * (1 - p); }
+                        else if (effectIn === 'slideRight') { opacity = p; offsetX = canvas.width * (1 - p); }
+                        else if (effectIn === 'slideLeft') { opacity = p; offsetX = -canvas.width * (1 - p); }
+                        else if (effectIn === 'typewriter') { 
+                            const charCount = Math.max(1, Math.floor(displayText.length * p));
+                            displayText = displayText.substring(0, charCount);
+                        }
+                    } else if (timeInClip > dur - fadeOut && fadeOut > 0) {
+                        const p = (dur - timeInClip) / fadeOut; 
+                        if (effectOut === 'fade') { opacity = p; }
+                        else if (effectOut === 'zoom') { opacity = p; scaleXY = 0.5 + (0.5 * p); }
+                        else if (effectOut === 'slideDown') { opacity = p; offsetY = 50 * (1 - p); }
+                        else if (effectOut === 'slideRight') { opacity = p; offsetX = canvas.width * (1 - p); }
+                        else if (effectOut === 'slideLeft') { opacity = p; offsetX = -canvas.width * (1 - p); }
+                    }
+
+                    opacity = Math.max(0, Math.min(1, opacity));
+                    const baseOpacity = clip.media.opacity !== undefined ? clip.media.opacity : 1;
+                    opacity *= baseOpacity;
+
+                    ctx.save();
+                    ctx.globalAlpha = opacity;
+                    
+                    const pxX = (clip.media.x / 100) * canvas.width + offsetX;
+                    const pxY = (clip.media.y / 100) * canvas.height + offsetY;
+                    
+                    ctx.translate(pxX, pxY);
+                    ctx.scale(scaleXY, scaleXY);
+
+                    ctx.font = `bold ${clip.media.size}px ${clip.media.font}`;
+                    ctx.fillStyle = clip.media.color;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    
+                    const blur = clip.media.shadowBlur !== undefined ? clip.media.shadowBlur : 10;
+                    ctx.shadowColor = clip.media.shadowColor || "black";
+                    ctx.shadowBlur = blur;
+                    ctx.shadowOffsetX = blur > 0 ? 2 : 0;
+                    ctx.shadowOffsetY = blur > 0 ? 2 : 0;
+
+                    const lines = displayText.split('\n');
+                    lines.forEach((line, i) => {
+                        ctx.fillText(line, 0, i * clip.media.size * 1.2);
+                    });
+                    
+                    ctx.restore();
+                }
+            });
+        }
+
+        // رسم الصورة/الفيديو الجديد بخصائص التكبير، الانتقالات، والمؤثرات
+        function drawToFit(media, clip) {
+            if (clip && clip.media.isHidden) return; // إخفاء الفيديو
+
+            let w = media.videoWidth || media.naturalWidth || media.width;
+            let h = media.videoHeight || media.naturalHeight || media.height;
+            if(!w || !h) return;
+
+            const fitMode = (clip && clip.media.fitMode) ? clip.media.fitMode : 'contain';
+            const baseScale = (clip && clip.media.scale !== undefined) ? clip.media.scale / 100 : 1;
+            const pxX = (clip && clip.media.x !== undefined) ? clip.media.x / 100 : 0.5;
+            const pxY = (clip && clip.media.y !== undefined) ? clip.media.y / 100 : 0.5;
+
+            let ratio;
+            if (fitMode === 'cover') ratio = Math.max(canvas.width / w, canvas.height / h);
+            else ratio = Math.min(canvas.width / w, canvas.height / h);
+
+            let drawW = w * ratio * baseScale;
+            let drawH = h * ratio * baseScale;
+
+            let drawX = (canvas.width * pxX) - (drawW / 2);
+            let drawY = (canvas.height * pxY) - (drawH / 2);
+
+            // --- تطبيق حركات وانتقالات الدخول والخروج ---
+            let animOpacity = 1;
+            let animScale = 1;
+            let animOffsetX = 0;
+            let animOffsetY = 0;
+
+            if (clip && clip.media) {
+                const dur = (clip.trimEnd - clip.trimStart) / clip.playbackRate;
+                const timeInClip = currentTime - clip.start;
+                const fadeIn = clip.media.fadeIn || 0;
+                const fadeOut = clip.media.fadeOut || 0;
+                const effectIn = clip.media.effectIn || 'none';
+                const effectOut = clip.media.effectOut || 'none';
+
+                if (timeInClip < fadeIn && fadeIn > 0) {
+                    const p = timeInClip / fadeIn;
+                    if (effectIn === 'fade') animOpacity = p;
+                    else if (effectIn === 'zoom') { animOpacity = p; animScale = 0.5 + (0.5 * p); }
+                    else if (effectIn === 'slideRight') { animOffsetX = canvas.width * (1 - p); }
+                    else if (effectIn === 'slideLeft') { animOffsetX = -canvas.width * (1 - p); }
+                    else if (effectIn === 'slideUp') { animOffsetY = canvas.height * (1 - p); }
+                } else if (timeInClip > dur - fadeOut && fadeOut > 0) {
+                    const p = (dur - timeInClip) / fadeOut;
+                    if (effectOut === 'fade') animOpacity = p;
+                    else if (effectOut === 'zoom') { animOpacity = p; animScale = 0.5 + (0.5 * p); }
+                    else if (effectOut === 'slideRight') { animOffsetX = canvas.width * (1 - p); }
+                    else if (effectOut === 'slideLeft') { animOffsetX = -canvas.width * (1 - p); }
+                    else if (effectOut === 'slideDown') { animOffsetY = canvas.height * (1 - p); }
+                }
+            }
+
+            // تطبيق مقياس التكبير (Anim Scale) من المنتصف
+            let centerX = drawX + drawW / 2;
+            let centerY = drawY + drawH / 2;
+            drawW *= animScale;
+            drawH *= animScale;
+            drawX = centerX - drawW / 2 + animOffsetX;
+            drawY = centerY - drawH / 2 + animOffsetY;
+            
+            let volume = 0;
+            if(clip && clip.media.reactiveEffect && clip.media.reactiveEffect !== 'none' && globalAnalyser) {
+                globalAnalyser.getByteFrequencyData(dataArray);
+                let sum = 0;
+                for(let i=0; i<dataArray.length; i++) sum += dataArray[i];
+                volume = sum / dataArray.length;
+            }
+
+            ctx.save();
+            ctx.globalAlpha = Math.max(0, Math.min(1, animOpacity)); // تطبيق شفافية التلاشي
+            
+            const intensity = clip && clip.media.reactiveIntensity !== undefined ? clip.media.reactiveIntensity : 1;
+            const sens = clip && clip.media.reactiveSensitivity !== undefined ? clip.media.reactiveSensitivity : 50;
+            const threshold = 255 - (sens * 2.55); 
+            
+            if(clip && clip.media.reactiveEffect === 'shake' && volume > threshold) {
+                const shakeAmt = (volume / 255) * 30 * intensity;
+                drawX += (Math.random() - 0.5) * shakeAmt;
+                drawY += (Math.random() - 0.5) * shakeAmt;
+            }
+
+            if(clip && clip.media.reactiveEffect === 'glitch' && volume > threshold) {
+                const glitchX = (Math.random() - 0.5) * (volume / 255) * 60 * intensity;
+                const glitchY = (Math.random() - 0.5) * (volume / 255) * 20 * intensity;
+                
+                ctx.globalCompositeOperation = 'screen';
+                ctx.fillStyle = 'rgba(255,0,0,0.5)';
+                ctx.drawImage(media, 0,0, w, h, drawX + glitchX, drawY + glitchY, drawW, drawH);
+                
+                ctx.fillStyle = 'rgba(0,0,255,0.5)';
+                ctx.drawImage(media, 0,0, w, h, drawX - glitchX, drawY - glitchY, drawW, drawH);
+                
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.globalAlpha = 0.7 * animOpacity;
+            }
+            
+            ctx.drawImage(media, 0,0, w, h, drawX, drawY, drawW, drawH);
+            
+            if (clip && clip.media.overlayEffect && clip.media.overlayEffect !== 'none') {
+                const effect = clip.media.overlayEffect;
+                const op = clip.media.overlayOpacity !== undefined ? clip.media.overlayOpacity : 0.5;
+                const sz = clip.media.overlaySize !== undefined ? clip.media.overlaySize : 1;
+                const spd = clip.media.overlaySpeed !== undefined ? clip.media.overlaySpeed : 1;
+                const colHex = clip.media.overlayColor || '#ffffff';
+                const useOldFilmTint = clip.media.overlayOldFilmTint !== false;
+                
+                const hexToRgb = (hex) => {
+                    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+                    return result ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}` : '255, 255, 255';
+                };
+                const rgbColor = hexToRgb(colHex);
+                
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(drawX, drawY, drawW, drawH);
+                ctx.clip();
+
+                if (effect === 'rain') {
+                    ctx.fillStyle = `rgba(${rgbColor}, ${op})`;
+                    for(let i=0; i<150; i++) {
+                        let rx = drawX + ((Math.sin(i * 123) * 10000 + currentTime * 200 * spd) % drawW);
+                        if (rx < drawX) rx += drawW;
+                        let ry = drawY + ((Math.cos(i * 321) * 10000 + currentTime * 1200 * spd) % drawH);
+                        if (ry < drawY) ry += drawH;
+                        ctx.fillRect(rx, ry, 1.5 * sz, (20 + (i%10)) * sz);
+                    }
+                } 
+                else if (effect === 'dust') {
+                    ctx.fillStyle = `rgba(${rgbColor}, ${op})`;
+                    for(let i=0; i<80; i++) {
+                        let rx = drawX + ((Math.sin(i * 123) * 10000 + Math.sin(currentTime * spd + i) * 100) % drawW);
+                        if (rx < drawX) rx += drawW;
+                        let ry = drawY + ((Math.cos(i * 321) * 10000 - currentTime * 80 * spd) % drawH);
+                        if (ry < drawY) ry += drawH;
+                        ctx.beginPath();
+                        ctx.arc(rx, ry, (Math.abs(Math.sin(i)) * 3 + 0.5) * sz, 0, Math.PI*2);
+                        ctx.fill();
+                    }
+                }
+                else if (effect === 'oldfilm') {
+                    if (useOldFilmTint) {
+                        ctx.fillStyle = `rgba(120, 80, 20, ${op * 0.5})`; // اللون السينمائي الأصفر
+                        ctx.fillRect(drawX, drawY, drawW, drawH);
+                    }
+                    
+                    ctx.fillStyle = `rgba(${rgbColor}, ${op})`;
+                    let numScratches = Math.floor(Math.abs(Math.sin(currentTime * 15 * spd)) * 4);
+                    for(let i=0; i<numScratches; i++) {
+                        let sx = drawX + (Math.random() * drawW);
+                        ctx.fillRect(sx, drawY, (1 + Math.random()*2) * sz, drawH);
+                    }
+                    
+                    if (Math.random() > (1 - (0.05 * spd))) {
+                        ctx.fillStyle = `rgba(0,0,0, ${0.15 * op})`;
+                        ctx.fillRect(drawX, drawY, drawW, drawH);
+                    }
+                }
+                ctx.restore();
+            }
+            ctx.restore();  
+        }
+
+        // --- نظام التصدير المطور ---
+        function showExportModal(format) {
+            if(clips.length === 0) return alert("لا يوجد شيء لتصديره!");
+            pendingExportFormat = format;
+            fileHandleToSave = null;
+            document.getElementById('exportFilenameInput').value = `مشروع_الفيديو_${Math.floor(Math.random()*1000)}`;
+            document.getElementById('exportFilenameInput').disabled = false;
+            document.getElementById('saveLocationText').innerText = "الافتراضي (التنزيلات)";
+            document.getElementById('exportSettingsModal').style.display = 'flex';
+        }
+
+        async function chooseSaveLocation() {
+            try {
+                if (!window.showSaveFilePicker) {
+                    return alert("متصفحك لا يدعم تحديد مسار الحفظ مسبقاً لأسباب أمنية. سيتم الحفظ في التنزيلات.");
+                }
+                const format = pendingExportFormat;
+                const ext = 'webm';
+                let filename = document.getElementById('exportFilenameInput').value.trim() || `Media_${Date.now()}`;
+                if (!filename.endsWith(`.${ext}`)) filename += `.${ext}`;
+
+                fileHandleToSave = await window.showSaveFilePicker({
+                    suggestedName: filename,
+                    types: [{
+                        description: format === 'video' ? 'ملف فيديو' : 'ملف صوت',
+                        accept: { [format === 'video' ? 'video/webm' : 'audio/webm']: [`.${ext}`] },
+                    }],
+                });
+                
+                document.getElementById('saveLocationText').innerText = fileHandleToSave.name;
+                document.getElementById('exportFilenameInput').disabled = true; 
+            } catch(e) {
+                console.log("تم إلغاء اختيار المسار أو حدث خطأ:", e);
+            }
+        }
+
+        async function doExport() {
+            document.getElementById('exportSettingsModal').style.display = 'none';
+            const format = pendingExportFormat;
+            const filename = document.getElementById('exportFilenameInput').value.trim() || `Media_${Date.now()}`;
+            
+            if(isExporting) return;
+            
+            initAudio();
+            if(audioCtx.state === 'suspended') await audioCtx.resume();
+            if(isPlaying) togglePlay();
+            
+            let exportMaxDuration = 0;
+            clips.forEach(c => { const end = c.start + ((c.trimEnd - c.trimStart)/c.playbackRate); if(end > exportMaxDuration) exportMaxDuration = end; });
+            
+            document.getElementById('exportOverlay').style.display = 'flex';
+            document.getElementById('exportProgress').style.width = '0%';
+            
+            currentTime = 0;
+            updatePlayheadUI(); drawCanvas();
+
+            const audioTracks = mixDestination ? mixDestination.stream.getAudioTracks() : [];
+            const tracksList = [];
+            
+            if (format === 'video') {
+                const videoStream = canvas.captureStream(30);
+                tracksList.push(...videoStream.getVideoTracks());
+            }
+            if (audioTracks.length > 0) tracksList.push(...audioTracks);
+            
+            if(tracksList.length === 0 && format === 'audio') {
+                alert("لا يوجد مسار صوتي للتصدير!");
+                document.getElementById('exportOverlay').style.display = 'none';
+                return;
+            }
+
+            const finalStream = new MediaStream(tracksList);
+            let options = { mimeType: format === 'video' ? 'video/webm;codecs=vp9,opus' : 'audio/webm' };
+            if (!MediaRecorder.isTypeSupported(options.mimeType)) options = { mimeType: format === 'video' ? 'video/webm' : 'audio/webm' }; 
+            if (!MediaRecorder.isTypeSupported(options.mimeType)) options = {}; 
+
+            exportRecorder = new MediaRecorder(finalStream, options);
+            const chunks = [];
+            
+            exportRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+            exportRecorder.onstop = async () => {
+                const blob = new Blob(chunks, { type: options.mimeType || (format==='video'?'video/mp4':'audio/mp3') });
+                document.getElementById('exportOverlay').style.display = 'none';
+                
+                if (fileHandleToSave) {
+                    try {
+                        const writable = await fileHandleToSave.createWritable();
+                        await writable.write(blob);
+                        await writable.close();
+                        alert("تم تصدير وحفظ الملف بنجاح!");
+                        return;
+                    } catch(e) {
+                        console.error("خطأ في الحفظ في المسار المخصص:", e);
+                        alert("حدث خطأ أثناء الحفظ في المسار المحدد. سيتم التنزيل الافتراضي بدلاً من ذلك.");
+                    }
+                }
+                
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${filename}.${format === 'video' ? 'webm' : 'webm'}`;
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+            };
+
+            isExporting = true;
+            isPlaying = true; 
+            exportRecorder.start();
+            
+            lastTime = performance.now();
+            animationFrameId = requestAnimationFrame(renderLoop);
+        }
+
+        // --- أدوات العرض ---
+        function toggleFullScreen() {
+            const container = document.getElementById('previewContainer');
+            if (!document.fullscreenElement) {
+                if (container.requestFullscreen) {
+                    container.requestFullscreen();
+                } else if (container.webkitRequestFullscreen) { /* Safari */
+                    container.webkitRequestFullscreen();
+                } else if (container.msRequestFullscreen) { /* IE11 */
+                    container.msRequestFullscreen();
+                }
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) { /* Safari */
+                    document.webkitExitFullscreen();
+                } else if (document.msExitFullscreen) { /* IE11 */
+                    document.msExitFullscreen();
+                }
+            }
+        }
+
+        // --- الذكاء الاصطناعي لتوليد الصور ---
+        function openAiImageModal() { document.getElementById('aiImageModal').style.display = 'flex'; }
+        function closeAiImageModal() { document.getElementById('aiImageModal').style.display = 'none'; }
+
+        function loadRefImage(event) {
+            const file = event.target.files[0];
+            if(!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                document.getElementById('aiRefPreview').src = e.target.result;
+                document.getElementById('aiRefPreview').style.display = 'block';
+                document.getElementById('removeRefBtn').style.display = 'block';
+                currentRefImageBase64 = e.target.result.split(',')[1];
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function removeRefImage() {
+            currentRefImageBase64 = null;
+            document.getElementById('aiRefInput').value = '';
+            document.getElementById('aiRefPreview').style.display = 'none';
+            document.getElementById('removeRefBtn').style.display = 'none';
+        }
+
+        async function generateAiImage() {
+            const prompt = document.getElementById('aiPrompt').value.trim();
+            if(!prompt) return alert('الرجاء كتابة وصف للصورة!');
+            document.getElementById('aiImageLoading').style.display = 'flex';
+            
+            try {
+                let base64Result = '';
+                if (currentRefImageBase64) {
+                    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${activeKey}`;
+                    const payload = {
+                        contents: [{ parts: [{text: prompt}, {inlineData: {mimeType: "image/png", data: currentRefImageBase64}}] }],
+                        generationConfig: { responseModalities: ["TEXT", "IMAGE"] }
+                    };
+                    const res = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)});
+                    const data = await res.json();
+                    if(data.error) throw new Error(data.error.message);
+                    const inlineData = data.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData;
+                    if(!inlineData) throw new Error('لم يتم إرجاع صورة من المولد.');
+                    base64Result = inlineData.data;
+                } else {
+                    const url = `https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict?key=${activeKey}`;
+                    const payload = { instances: { prompt: prompt }, parameters: { sampleCount: 1 } };
+                    const res = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)});
+                    const data = await res.json();
+                    if(data.error) throw new Error(data.error.message);
+                    if(!data.predictions || !data.predictions[0]) throw new Error('لم يتم إرجاع صورة من المولد.');
+                    base64Result = data.predictions[0].bytesBase64Encoded;
+                }
+                addImageToGallery(base64Result);
+            } catch(e) {
+                console.error(e);
+                alert('حدث خطأ أثناء التوليد. التفاصيل: ' + e.message);
+            } finally {
+                document.getElementById('aiImageLoading').style.display = 'none';
+            }
+        }
+
+        function addImageToGallery(base64Data) {
+            const dataUrl = 'data:image/png;base64,' + base64Data;
+            const gallery = document.getElementById('aiGallery');
+            const imgId = 'ai_img_' + Date.now();
+            const wrapper = document.createElement('div');
+            wrapper.className = 'relative group rounded-lg border border-gray-600 overflow-hidden bg-black aspect-square flex justify-center items-center shadow-lg';
+            wrapper.innerHTML = `
+                <img src="${dataUrl}" class="w-full h-full object-cover block" />
+                <div class="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1.5 p-2">
+                    <button onclick="addAiImageToProject('${imgId}', '${dataUrl}')" class="bg-blue-600 hover:bg-blue-500 text-white text-[10px] px-2 py-1.5 rounded w-full transition flex items-center justify-center gap-1"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>إدراج للمشروع</button>
+                    <button onclick="openAiVideoModal('${dataUrl}')" class="bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] px-2 py-1.5 rounded w-full transition flex items-center justify-center gap-1"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>تحريك الصورة</button>
+                    <button onclick="editAiImage('${dataUrl}')" class="bg-purple-600 hover:bg-purple-500 text-white text-[10px] px-2 py-1.5 rounded w-full transition flex items-center justify-center gap-1"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>تعديل (كمرجع)</button>
+                    <button onclick="downloadAiImage('${dataUrl}')" class="bg-gray-600 hover:bg-gray-500 text-white text-[10px] px-2 py-1.5 rounded w-full transition flex items-center justify-center gap-1"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>تحميل</button>
+                </div>
+            `;
+            gallery.prepend(wrapper);
+        }
+
+        async function addAiImageToProject(id, dataUrl) {
+            const res = await fetch(dataUrl);
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const mediaObj = {
+                id: id, name: 'صورة ذكاء اصطناعي ' + new Date().toLocaleTimeString('ar-SA'),
+                url: url, type: 'image', element: new Image(), duration: 5, reactiveEffect: 'none', overlayEffect: 'none',
+                scale: 100, x: 50, y: 50, fitMode: 'contain', isHidden: false, effectIn: 'none', effectOut: 'none', fadeIn: 0, fadeOut: 0
+            };
+            mediaObj.element.src = url;
+            libraryMap.set(mediaObj.id, mediaObj);
+            addToLibrary(mediaObj); 
+            closeAiImageModal(); 
+        }
+
+        function downloadAiImage(dataUrl) {
+            const a = document.createElement('a');
+            a.href = dataUrl;
+            a.download = `AI_Generated_${Date.now()}.png`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+
+        function editAiImage(dataUrl) {
+            document.getElementById('aiRefPreview').src = dataUrl;
+            document.getElementById('aiRefPreview').style.display = 'block';
+            document.getElementById('removeRefBtn').style.display = 'block';
+            currentRefImageBase64 = dataUrl.split(',')[1];
+            document.getElementById('aiPrompt').focus();
+        }
+
+        // --- الذكاء الاصطناعي لتحريك الفيديوهات ---
+        function openAiVideoModal(dataUrl) {
+            document.getElementById('aiVideoModal').style.display = 'flex';
+            document.getElementById('aiVideoRefPreview').src = dataUrl;
+            currentVideoRefImage = dataUrl;
+            document.getElementById('aiVideoPrompt').value = '';
+        }
+
+        function closeAiVideoModal() {
+            document.getElementById('aiVideoModal').style.display = 'none';
+            currentVideoRefImage = null;
+        }
+
+        async function generateAiVideo() {
+            const prompt = document.getElementById('aiVideoPrompt').value.trim();
+            const durationInput = parseFloat(document.getElementById('aiVideoDuration').value) || 3;
+            if(!prompt) return alert('الرجاء وصف الحركة المطلوبة للصورة!');
+            if(!currentVideoRefImage) return alert('الصورة مفقودة!');
+
+            document.getElementById('aiVideoLoading').style.display = 'flex';
+
+            try {
+                let finalImageToAnimate = currentVideoRefImage;
+                try {
+                    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${activeKey}`;
+                    const payload = {
+                        contents: [{ parts: [
+                            {text: "قم بتعديل هذه الصورة بدقة لتناسب هذا الوصف إذا كان يحتوي على تغييرات في المشهد: " + prompt}, 
+                            {inlineData: {mimeType: "image/png", data: currentVideoRefImage.split(',')[1]}}
+                        ]}],
+                        generationConfig: { responseModalities: ["TEXT", "IMAGE"] }
+                    };
+                    const res = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)});
+                    const data = await res.json();
+                    const inlineData = data.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData;
+                    if(inlineData) finalImageToAnimate = 'data:image/png;base64,' + inlineData.data;
+                } catch(apiError) { console.warn('تعديل الذكاء الاصطناعي للصورة فشل.', apiError); }
+
+                const videoUrl = await simulateImageToVideo(finalImageToAnimate, prompt, durationInput);
+                addVideoToGallery(videoUrl);
+            } catch (fallbackError) {
+                console.error("فشل النظام:", fallbackError);
+                alert('حدث خطأ أثناء تحريك الصورة. التفاصيل: ' + fallbackError.message);
+            } finally {
+                document.getElementById('aiVideoLoading').style.display = 'none';
+            }
+        }
+
+        function simulateImageToVideo(dataUrl, prompt, durationInSeconds) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => {
+                    const cvs = document.createElement('canvas');
+                    cvs.width = img.width || 1280; cvs.height = img.height || 720;
+                    const cctx = cvs.getContext('2d');
+                    
+                    const stream = cvs.captureStream(30);
+                    const recorder = new MediaRecorder(stream, {mimeType: 'video/webm'});
+                    const chunks = [];
+                    recorder.ondataavailable = e => chunks.push(e.data);
+                    recorder.onstop = () => { const blob = new Blob(chunks, {type: 'video/webm'}); resolve(URL.createObjectURL(blob)); };
+                    
+                    recorder.start();
+                    let frame = 0;
+                    const totalFrames = Math.floor(durationInSeconds * 30);
+                    
+                    const text = prompt.toLowerCase();
+                    let zoomType = 'in'; 
+                    if (text.includes('تبعيد') || text.includes('تصغير') || text.includes('out') || text.includes('للخلف')) zoomType = 'out';
+                    else if (text.includes('ثبات') || text.includes('بدون تقريب')) zoomType = 'none';
+
+                    let panX = 0; 
+                    if (text.includes('يمين') || text.includes('right')) panX = 1;
+                    else if (text.includes('يسار') || text.includes('left')) panX = -1;
+
+                    let panY = 0; 
+                    if (text.includes('اسفل') || text.includes('تحت') || text.includes('down')) panY = 1;
+                    else if (text.includes('اعلى') || text.includes('فوق') || text.includes('up')) panY = -1;
+
+                    let baseScale = (panX !== 0 || panY !== 0) ? 1.25 : 1.0;
+                    if (zoomType === 'out') baseScale = 1.3;
+
+                    function drawFrame() {
+                        cctx.fillStyle = 'black';
+                        cctx.fillRect(0,0, cvs.width, cvs.height);
+                        
+                        const progress = frame / totalFrames; 
+                        let currentScale = baseScale;
+                        if (zoomType === 'in') currentScale = baseScale + (progress * 0.2); 
+                        else if (zoomType === 'out') currentScale = baseScale - (progress * 0.2); 
+                        
+                        const w = cvs.width * currentScale; const h = cvs.height * currentScale;
+                        const maxPanX = (w - cvs.width) / 2; const maxPanY = (h - cvs.height) / 2;
+                        
+                        let cx = (cvs.width - w) / 2; let cy = (cvs.height - h) / 2;
+                        
+                        cx += -panX * maxPanX * (progress - 0.5) * 2;
+                        cy += -panY * maxPanY * (progress - 0.5) * 2;
+                        
+                        cctx.drawImage(img, cx, cy, w, h);
+                        
+                        frame++;
+                        if(frame <= totalFrames) setTimeout(() => requestAnimationFrame(drawFrame), 33);
+                        else recorder.stop();
+                    }
+                    drawFrame();
+                };
+                img.src = dataUrl;
+            });
+        }
+
+        function addVideoToGallery(videoUrl) {
+            const gallery = document.getElementById('aiVideoGallery');
+            const vidId = 'ai_vid_' + Date.now();
+            const wrapper = document.createElement('div');
+            wrapper.className = 'relative group rounded-lg border border-gray-600 overflow-hidden bg-black aspect-video flex justify-center items-center shadow-lg';
+            wrapper.innerHTML = `
+                <video src="${videoUrl}" autoplay loop muted class="w-full h-full object-cover block"></video>
+                <div class="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 p-3">
+                    <button onclick="addAiVideoToProject('${vidId}', '${videoUrl}')" class="bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] px-2 py-1.5 rounded w-full transition flex items-center justify-center gap-1"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>إدراج للمشروع</button>
+                    <button onclick="downloadAiVideo('${videoUrl}')" class="bg-gray-600 hover:bg-gray-500 text-white text-[11px] px-2 py-1.5 rounded w-full transition flex items-center justify-center gap-1"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>تحميل</button>
+                </div>
+            `;
+            gallery.prepend(wrapper);
+        }
+
+        async function addAiVideoToProject(id, videoUrl) {
+            const res = await fetch(videoUrl);
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            
+            const mediaObj = {
+                id: id,
+                name: 'فيديو متحرك بالذكاء ' + new Date().toLocaleTimeString('ar-SA'),
+                url: url, type: 'video', element: document.createElement('video'), duration: 3, reactiveEffect: 'none', overlayEffect: 'none',
+                scale: 100, x: 50, y: 50, fitMode: 'contain', isMuted: false, isHidden: false,
+                volume: 1, audioFadeIn: 0, audioFadeOut: 0, audioStartVolume: 0,
+                effectIn: 'none', effectOut: 'none', fadeIn: 0, fadeOut: 0
+            };
+            mediaObj.element.src = url;
+            mediaObj.element.preload = 'auto';
+            document.getElementById('hiddenMedia').appendChild(mediaObj.element);
+            
+            await new Promise(resolve => {
+                mediaObj.element.onloadedmetadata = () => { mediaObj.duration = mediaObj.element.duration; resolve(); };
+            });
+
+            try {
+                mediaObj.gainNode = audioCtx.createGain();
+                mediaObj.audioSource = audioCtx.createMediaElementSource(mediaObj.element);
+                mediaObj.audioSource.connect(mediaObj.gainNode);
+                mediaObj.gainNode.connect(audioCtx.destination);
+                mediaObj.gainNode.connect(mixDestination);
+                mediaObj.gainNode.connect(globalAnalyser);
+            } catch(e) {}
+
+            libraryMap.set(mediaObj.id, mediaObj);
+            addToLibrary(mediaObj); 
+            closeAiVideoModal(); 
+        }
+
+        function downloadAiVideo(videoUrl) {
+            const a = document.createElement('a');
+            a.href = videoUrl;
+            a.download = `AI_Animated_${Date.now()}.webm`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+
+        // تشغيل مبدئي
+        initTracks();
+        drawCanvas();
+    </script>
+</body>
+</html>
