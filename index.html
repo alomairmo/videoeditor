@@ -49,6 +49,33 @@
 </head>
 <body class="bg-gray-900 text-gray-200 h-screen flex flex-col overflow-hidden selection:bg-blue-500 selection:text-white">
 
+    <!-- نافذة طلب مفتاح API عند بدء التشغيل -->
+    <div id="apiKeyModal" class="fixed inset-0 bg-black/95 z-[300] hidden flex-col items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-gray-800 border border-purple-500/50 rounded-xl w-full max-w-md flex flex-col shadow-[0_0_30px_rgba(168,85,247,0.15)] overflow-hidden">
+            <div class="p-5 border-b border-gray-700 bg-gray-900/50 flex flex-col items-center justify-center text-center gap-2">
+                <svg class="w-10 h-10 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
+                <h2 class="text-xl font-bold text-white">إعداد الذكاء الاصطناعي</h2>
+                <p class="text-xs text-gray-400">محرر الفيديو والصوت الذكي</p>
+            </div>
+            <div class="p-6 flex flex-col gap-4">
+                <div class="flex flex-col gap-2">
+                    <label class="text-sm text-gray-300 font-bold">مفتاح Google Gemini API</label>
+                    <input type="password" id="apiKeyInput" class="bg-gray-900 border border-gray-600 rounded p-3 text-sm text-white focus:outline-none focus:border-purple-500 transition shadow-inner" placeholder="AIzaSy...">
+                    <p class="text-[10px] text-gray-500">سيتم حفظ المفتاح في متصفحك. يستخدم حصرياً لتوليد (الترجمة، الصور، الفيديو) ولا يتم مشاركته مع أي جهة.</p>
+                </div>
+                
+                <div class="flex flex-col gap-2 mt-2">
+                    <button onclick="saveApiKey()" class="bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-lg shadow-lg transition flex justify-center items-center gap-2">
+                        حفظ وبدء الاستخدام
+                    </button>
+                    <button onclick="skipApiKey()" class="bg-transparent hover:bg-gray-700 border border-gray-700 text-gray-400 py-2 rounded-lg transition text-xs mt-2">
+                        الاستمرار كـ محرر عادي (بدون ذكاء اصطناعي)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- نافذة إعدادات التصدير -->
     <div id="exportSettingsModal" class="fixed inset-0 bg-black/90 z-[150] hidden flex-col items-center justify-center p-4">
         <div class="bg-gray-800 border border-gray-700 rounded-lg w-full max-w-sm flex flex-col shadow-2xl">
@@ -744,13 +771,34 @@
         let pendingExportFormat = 'video';
         let fileHandleToSave = null;
         
+        let activeKey = localStorage.getItem('gemini_api_key') || "";
+        
         const canvas = document.getElementById('previewCanvas');
         const ctx = canvas.getContext('2d');
         const timelineContainer = document.getElementById('timelineContainer');
-        const apiKey = ""; 
-        const userApiKey = "AIzaSyBJb2-LB5rWBBdPGjfpRcFckiYxQR8V8TU";
-        const activeKey = apiKey || userApiKey;
         
+        // --- إدارة المفتاح (API Key) ---
+        function checkApiKey() {
+            if (!activeKey) {
+                document.getElementById('apiKeyModal').style.display = 'flex';
+            }
+        }
+
+        function saveApiKey() {
+            const key = document.getElementById('apiKeyInput').value.trim();
+            if (!key) {
+                alert("الرجاء إدخال المفتاح أولاً!");
+                return;
+            }
+            activeKey = key;
+            localStorage.setItem('gemini_api_key', key);
+            document.getElementById('apiKeyModal').style.display = 'none';
+        }
+
+        function skipApiKey() {
+            document.getElementById('apiKeyModal').style.display = 'none';
+        }
+
         // --- إدارة المسارات المتعددة ---
         function initTracks() {
             addTrack('text', 'نصوص وإضافات');
@@ -866,9 +914,9 @@
                     name: file.name, url: url, type: type, element: null, duration: 5, 
                     reactiveEffect: 'none', reactiveIntensity: 1, reactiveSensitivity: 50, overlayEffect: 'none',
                     scale: 100, x: 50, y: 50, fitMode: 'contain',
-                    isMuted: false, isHidden: false, // خصائص الإخفاء والكتم
-                    volume: 1, audioFadeIn: 0, audioFadeOut: 0, audioStartVolume: 0, // خصائص الصوت المتقدمة
-                    effectIn: 'none', effectOut: 'none', fadeIn: 0, fadeOut: 0 // تأثيرات الدخول/الخروج للفيديو/الصورة
+                    isMuted: false, isHidden: false, 
+                    volume: 1, audioFadeIn: 0, audioFadeOut: 0, audioStartVolume: 0, 
+                    effectIn: 'none', effectOut: 'none', fadeIn: 0, fadeOut: 0 
                 };
 
                 if (type === 'video' || type === 'audio') {
@@ -1050,6 +1098,7 @@
         }
 
         async function executeAISubtitles() {
+            if(!activeKey) return alert("الرجاء إدخال مفتاح API أولاً (قم بتحديث الصفحة لإدخاله).");
             if(!aiTargetMediaClip || !aiPreviewClip) return;
             const customStyles = {
                 font: aiPreviewClip.media.font, color: aiPreviewClip.media.color, shadowColor: aiPreviewClip.media.shadowColor,
@@ -1871,7 +1920,7 @@
                             targetVol = startVol + (targetVol - startVol) * ((dur - timeInClip) / fadeOut);
                         }
                     }
-                    clip.media.gainNode.gain.value = targetVol; // التحديث المباشر للمتصفح
+                    clip.media.gainNode.gain.value = targetVol; 
                 }
             });
 
@@ -2169,7 +2218,7 @@
                 }
                 else if (effect === 'oldfilm') {
                     if (useOldFilmTint) {
-                        ctx.fillStyle = `rgba(120, 80, 20, ${op * 0.5})`; // اللون السينمائي الأصفر
+                        ctx.fillStyle = `rgba(120, 80, 20, ${op * 0.5})`; 
                         ctx.fillRect(drawX, drawY, drawW, drawH);
                     }
                     
@@ -2207,15 +2256,15 @@
                     return alert("متصفحك لا يدعم تحديد مسار الحفظ مسبقاً لأسباب أمنية. سيتم الحفظ في التنزيلات.");
                 }
                 const format = pendingExportFormat;
-                const ext = 'webm';
+                const ext = format === 'video' ? 'mp4' : 'mp3'; // تغيير الصيغة الافتراضية هنا
                 let filename = document.getElementById('exportFilenameInput').value.trim() || `Media_${Date.now()}`;
                 if (!filename.endsWith(`.${ext}`)) filename += `.${ext}`;
 
                 fileHandleToSave = await window.showSaveFilePicker({
                     suggestedName: filename,
                     types: [{
-                        description: format === 'video' ? 'ملف فيديو' : 'ملف صوت',
-                        accept: { [format === 'video' ? 'video/webm' : 'audio/webm']: [`.${ext}`] },
+                        description: format === 'video' ? 'ملف فيديو (MP4)' : 'ملف صوت (MP3)',
+                        accept: { [format === 'video' ? 'video/mp4' : 'audio/mp3']: [`.${ext}`] },
                     }],
                 });
                 
@@ -2229,6 +2278,7 @@
         async function doExport() {
             document.getElementById('exportSettingsModal').style.display = 'none';
             const format = pendingExportFormat;
+            const ext = format === 'video' ? 'mp4' : 'mp3'; // تحديد الصيغة
             const filename = document.getElementById('exportFilenameInput').value.trim() || `Media_${Date.now()}`;
             
             if(isExporting) return;
@@ -2262,16 +2312,29 @@
             }
 
             const finalStream = new MediaStream(tracksList);
-            let options = { mimeType: format === 'video' ? 'video/webm;codecs=vp9,opus' : 'audio/webm' };
-            if (!MediaRecorder.isTypeSupported(options.mimeType)) options = { mimeType: format === 'video' ? 'video/webm' : 'audio/webm' }; 
-            if (!MediaRecorder.isTypeSupported(options.mimeType)) options = {}; 
+            
+            // تحديد أفضل صيغة مدعومة للمتصفح لتوليد MP4 حقيقي
+            let mimeType = '';
+            if (format === 'video') {
+                const videoTypes = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm'];
+                for (let t of videoTypes) {
+                    if (MediaRecorder.isTypeSupported(t)) { mimeType = t; break; }
+                }
+            } else {
+                const audioTypes = ['audio/mp3', 'audio/webm'];
+                for (let t of audioTypes) {
+                    if (MediaRecorder.isTypeSupported(t)) { mimeType = t; break; }
+                }
+            }
+
+            let options = mimeType ? { mimeType: mimeType } : {};
 
             exportRecorder = new MediaRecorder(finalStream, options);
             const chunks = [];
             
             exportRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
             exportRecorder.onstop = async () => {
-                const blob = new Blob(chunks, { type: options.mimeType || (format==='video'?'video/mp4':'audio/mp3') });
+                const blob = new Blob(chunks, { type: mimeType || (format === 'video' ? 'video/mp4' : 'audio/mp3') });
                 document.getElementById('exportOverlay').style.display = 'none';
                 
                 if (fileHandleToSave) {
@@ -2290,7 +2353,7 @@
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `${filename}.${format === 'video' ? 'webm' : 'webm'}`;
+                a.download = `${filename}.${ext}`;
                 document.body.appendChild(a);
                 a.click();
                 setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
@@ -2353,6 +2416,7 @@
         async function generateAiImage() {
             const prompt = document.getElementById('aiPrompt').value.trim();
             if(!prompt) return alert('الرجاء كتابة وصف للصورة!');
+            if(!activeKey) return alert("الرجاء إدخال مفتاح API أولاً من إعدادات الذكاء الاصطناعي.");
             document.getElementById('aiImageLoading').style.display = 'flex';
             
             try {
@@ -2455,6 +2519,7 @@
             const durationInput = parseFloat(document.getElementById('aiVideoDuration').value) || 3;
             if(!prompt) return alert('الرجاء وصف الحركة المطلوبة للصورة!');
             if(!currentVideoRefImage) return alert('الصورة مفقودة!');
+            if(!activeKey) return alert("الرجاء إدخال مفتاح API أولاً من إعدادات الذكاء الاصطناعي.");
 
             document.getElementById('aiVideoLoading').style.display = 'flex';
 
@@ -2557,7 +2622,7 @@
                 <video src="${videoUrl}" autoplay loop muted class="w-full h-full object-cover block"></video>
                 <div class="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 p-3">
                     <button onclick="addAiVideoToProject('${vidId}', '${videoUrl}')" class="bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] px-2 py-1.5 rounded w-full transition flex items-center justify-center gap-1"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>إدراج للمشروع</button>
-                    <button onclick="downloadAiVideo('${videoUrl}')" class="bg-gray-600 hover:bg-gray-500 text-white text-[11px] px-2 py-1.5 rounded w-full transition flex items-center justify-center gap-1"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>تحميل</button>
+                    <button onclick="downloadAiVideo('${videoUrl}')" class="bg-gray-600 hover:bg-gray-500 text-white text-[11px] px-2 py-1.5 rounded w-full transition flex items-center justify-center gap-1"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>تحميل</button>
                 </div>
             `;
             gallery.prepend(wrapper);
@@ -2608,6 +2673,7 @@
         }
 
         // تشغيل مبدئي
+        checkApiKey();
         initTracks();
         drawCanvas();
     </script>
